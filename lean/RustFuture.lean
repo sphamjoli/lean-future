@@ -23,5 +23,6 @@ import RustFuture.Semantics.Future
 import RustFuture.Semantics.Poll
 import RustFuture.Semantics.Trace
 import RustFuture.Semantics.Waker
+import RustFuture.Semantics.WellFormed
 import RustFuture.Theorems.Composition
 import RustFuture.Theorems.Soundness
