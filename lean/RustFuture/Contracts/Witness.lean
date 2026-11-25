@@ -88,6 +88,7 @@ theorem wakeRun_wellFormed : WellFormed wakeRun where
     · exact ⟨2, 0, by decide, by decide, .inl ⟨.pending, rfl⟩⟩
     · omega
     · omega
+  noDropDuringPoll := fun _ _ _ _ _ _ h => absurd h wakeRun_no_special.2.1
   nothingAfterTerminal := by
     intro i hT
     rcases hT with h | h
@@ -122,7 +123,7 @@ theorem assumptions_consistent_live :
   · intro i w hw _
     obtain ⟨rfl, rfl⟩ := wakeRun_wake hw
     exact ⟨5, by decide, (by decide : (4 : Nat) < 5), rfl⟩
-  · intro b i w ⟨c, hbi, hb, hi, _, _⟩ k w' hik hnp hk
+  · intro b i w ⟨c, hbi, hb, hi, _, _⟩ k w' hik hnp _ hk
     rcases wakeRun_return hi with ⟨rfl, rfl, -⟩ | ⟨rfl, -, h⟩
     · obtain ⟨rfl, -⟩ := wakeRun_wake hk
       exact ⟨4, 0, by omega, hnp, rfl, rfl⟩
@@ -130,7 +131,7 @@ theorem assumptions_consistent_live :
   · intro b i w ⟨c, hbi, hb, hi, _, _⟩ j hij hnp _ _ _
     rcases wakeRun_return hi with ⟨rfl, rfl, -⟩ | ⟨rfl, -, h⟩
     · rcases wakeRun_begin hb with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩
-      · refine .inl ⟨4, 0, by decide, fun m c w h1 h2 hm => ?_, rfl, rfl⟩
+      · refine ⟨4, by decide, .inl ⟨0, w, rfl, ⟨1, 0, by decide, by decide, hb, fun m c w h1 h2 hm => ?_⟩, rfl⟩⟩
         rcases wakeRun_begin hm with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩ <;> omega
       · omega
     · cases h
