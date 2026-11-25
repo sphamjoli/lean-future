@@ -4,7 +4,7 @@
 
 > **Academic prototype.** This is a research proof of concept. It is not a verified library, it makes no guarantees about any production Rust code, and parts of the model are still open work, as marked throughout.
 
-This project is an attempt to formalise the `Future` trait of the Rust standard library, as documented for Rust 1.97.1. A *trait* in Rust is a named set of operations that a type promises to provide. The documentation defines `Future` as follows:
+This project is an attempt to formalise the `Future` trait of the Rust standard library. A *trait* in Rust is a named set of operations that a type promises to provide. The documentation defines `Future` as follows:
 
 ```rust
 pub trait Future {
@@ -14,7 +14,7 @@ pub trait Future {
 }
 ```
 
-The documentation opens: *A future represents an asynchronous computation, commonly obtained by use of `async`.* An *asynchronous computation* is one that may not have finished yet, and `async` is the Rust keyword that turns ordinary code into a future. The definition has two parts:
+According to the [Rust standard library documentation](https://doc.rust-lang.org/std/future/trait.Future.html), a future represents an *asynchronous computation*, commonly obtained by use of `async`. An asynchronous computation is one that may not have finished yet, and `async` is the Rust keyword that turns ordinary code into a future. The definition has two parts:
 
 - `type Output` names the type of the result the future produces once it finishes.
 - `poll` asks the future to make progress. Its input `self: Pin<&mut Self>` is the future itself, held at a fixed place in memory so that it may safely refer to its own parts. Its input `cx` is a *context*, which carries the call-back card described below. Its answer `Poll<Self::Output>` is either `Poll::Ready(result)`, with the finished result, or `Poll::Pending`, meaning *not yet*.
