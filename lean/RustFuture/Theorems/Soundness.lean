@@ -19,3 +19,8 @@ core (`propext`, `Quot.sound`, `Classical.choice`). CI checks this output. -/
 #print axioms RustFuture.Contracts.assumptions_consistent
 #print axioms RustFuture.Contracts.assumptions_consistent_live
 #print axioms RustFuture.Implementations.pending_without_wake
+#print axioms RustFuture.Counterexamples.will_wake_accepted
+#print axioms RustFuture.Implementations.pendingTrace_wellFormed
+#print axioms RustFuture.Counterexamples.epoch_not_confused
+#print axioms RustFuture.Counterexamples.reusedCall_not_wellFormed
+#print axioms RustFuture.Implementations.pendingTrace_callsMatched

@@ -1,7 +1,8 @@
 import RustFuture.Implementations.Oneshot
 /-! The `NoLostWakeup` invariant is refutable: a state that is suspended, has a
 value, has no poll in flight, and whose latest waker was never woken (the sender
-woke the stale waker 1 instead of 2) violates it.
+woke the stale waker 1 instead of 2), and where the sender owes no further
+notification, violates it.
 
 What this does NOT show: that `buggy::Receiver` reaches this state. Reachability
 from its transition system is open. The Rust test `buggy_oneshot_loses_wake`
@@ -10,7 +11,7 @@ tasks; with a single shared task waker nothing would be lost. -/
 namespace RustFuture.Counterexamples
 open RustFuture Implementations
 
-def staleState : OneshotState := ⟨true, some 1, some 2, false, true, false⟩
+def staleState : OneshotState := ⟨true, some 1, some 2, false, true, false, false⟩
 
 theorem noLostWakeup_refutable :
     ¬ Properties.NoLostWakeup oneshotObs (· = staleState) := by

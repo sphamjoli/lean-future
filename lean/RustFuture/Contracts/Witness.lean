@@ -28,13 +28,15 @@ def liveModel : FutureModel Nat Nat where
 theorem wakeRun_is_run : liveModel.IsRunWith id wakeRun :=
   ⟨rfl, fun _ => ⟨rfl, rfl⟩⟩
 
-/-- States are trace positions. Progress is possible from position 3; Alice is
-wanted before position 7; the task is live before position 7. -/
+/-- States are trace positions. Both wakers belong to task 0. Progress is
+possible from position 3; Alice is wanted, and the task live, before position 7.
+Happens-before is supplied as trace order, a choice this witness makes, not one
+the executor model forces. -/
 def liveContext : Context Nat Nat where
   memory := { exclusiveAccess := fun _ => True, isUnpin := True, pinValid := fun _ => True,
               unpin_trivial := fun _ _ => trivial }
   executor := { env := ⟨fun _ => 0⟩, liveFrom := fun i _ => i < 7, hb := (· < ·),
-                hb_of_lt := fun _ _ h => h, hb_trans := fun _ _ _ => Nat.lt_trans }
+                hb_trans := fun _ _ _ => Nat.lt_trans, hb_forward := fun _ _ h => h }
   environment := { progressOpportunity := fun n => 3 ≤ n, stillInterested := fun n => n < 7 }
 
 theorem wakeRun_wake {k w : Nat} (h : wakeRun k = .wake w) : k = 4 ∧ w = 0 := by
@@ -43,57 +45,94 @@ theorem wakeRun_wake {k w : Nat} (h : wakeRun k = .wake w) : k = 4 ∧ w = 0 := 
   | 0, h | 1, h | 2, h | 3, h | 5, h | 6, h | 7, h => simp [wakeRun] at h
   | k + 8, h => simp [wakeRun] at h
 
-theorem wakeRun_pending {i c : Nat} (h : wakeRun i = .pollReturn c .pending) : i = 2 := by
+theorem wakeRun_begin {i c w : Nat} (h : wakeRun i = .pollBegin c w) :
+    (i = 1 ∧ c = 0 ∧ w = 0) ∨ (i = 6 ∧ c = 1 ∧ w = 1) := by
   match i, h with
-  | 2, _ => rfl
-  | 0, h | 1, h | 3, h | 4, h | 5, h | 6, h | 7, h => simp [wakeRun] at h
-  | k + 8, h => simp [wakeRun] at h
-
-theorem wakeRun_pollBegin {i : Nat} (h : PollBeginAt wakeRun i) : i = 1 ∨ i = 6 := by
-  obtain ⟨c, w, h⟩ := h
-  match i, h with
-  | 1, _ => exact .inl rfl
-  | 6, _ => exact .inr rfl
+  | 1, h => simp [wakeRun] at h; exact .inl ⟨rfl, h.1.symm, h.2.symm⟩
+  | 6, h => simp [wakeRun] at h; exact .inr ⟨rfl, h.1.symm, h.2.symm⟩
   | 0, h | 2, h | 3, h | 4, h | 5, h | 7, h => simp [wakeRun] at h
   | k + 8, h => simp [wakeRun] at h
 
-theorem wakeRun_ready {i : Nat} (h : ReadyAt wakeRun i) : i = 7 := by
-  obtain ⟨c, v, h⟩ := h
-  match i, h with
-  | 7, _ => rfl
-  | 0, h | 1, h | 2, h | 3, h | 4, h | 5, h | 6, h => simp [wakeRun] at h
+theorem wakeRun_return {k c : Nat} {r : Poll Nat} (h : wakeRun k = .pollReturn c r) :
+    (k = 2 ∧ c = 0 ∧ r = .pending) ∨ (k = 7 ∧ c = 1 ∧ r = .ready 7) := by
+  match k, h with
+  | 2, h => simp [wakeRun] at h; exact .inl ⟨rfl, h.1.symm, h.2.symm⟩
+  | 7, h => simp [wakeRun] at h; exact .inr ⟨rfl, h.1.symm, h.2.symm⟩
+  | 0, h | 1, h | 3, h | 4, h | 5, h | 6, h => simp [wakeRun] at h
   | k + 8, h => simp [wakeRun] at h
 
-/-- Assumptions and obligations hold together on a run where a wake on a live
-task, delivery, a latest-waker window and a progress opportunity all occur. -/
+theorem wakeRun_no_special {k : Nat} :
+    wakeRun k ≠ .undefinedBehaviour ∧ wakeRun k ≠ .drop ∧ wakeRun k ≠ .abort ∧
+      ∀ c, wakeRun k ≠ .panic c := by
+  match k with
+  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 => simp [wakeRun]
+  | k + 8 => simp [wakeRun]
+
+theorem wakeRun_ends {k c : Nat} (h : EndsAt wakeRun k c) : (k = 2 ∧ c = 0) ∨ (k = 7 ∧ c = 1) := by
+  rcases h with ⟨r, hr⟩ | hp
+  · rcases wakeRun_return hr with ⟨rfl, rfl, -⟩ | ⟨rfl, rfl, -⟩
+    · exact .inl ⟨rfl, rfl⟩
+    · exact .inr ⟨rfl, rfl⟩
+  · exact absurd hp (wakeRun_no_special.2.2.2 c)
+
+theorem wakeRun_wellFormed : WellFormed wakeRun where
+  uniqueCalls := by
+    intro i j c w w' hi hj
+    rcases wakeRun_begin hi with ⟨rfl, rfl, -⟩ | ⟨rfl, rfl, -⟩ <;>
+      rcases wakeRun_begin hj with ⟨rfl, h, -⟩ | ⟨rfl, h, -⟩ <;> omega
+  noOverlap := by
+    intro i c w j c' w' hij hi hj
+    rcases wakeRun_begin hi with ⟨rfl, rfl, -⟩ | ⟨rfl, rfl, -⟩ <;>
+      rcases wakeRun_begin hj with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩
+    · omega
+    · exact ⟨2, 0, by decide, by decide, .inl ⟨.pending, rfl⟩⟩
+    · omega
+    · omega
+  nothingAfterTerminal := by
+    intro i hT
+    rcases hT with h | h
+    · exact absurd h wakeRun_no_special.2.1
+    · exact absurd h wakeRun_no_special.2.2.1
+
+theorem wakeRun_callsMatched : CallsMatched wakeRun where
+  endMatchesBegin := by
+    intro k c hk
+    rcases wakeRun_ends hk with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨1, 0, by decide, rfl⟩
+    · exact ⟨6, 1, by decide, rfl⟩
+  endsOnce := by
+    intro k k' c hk hk'
+    rcases wakeRun_ends hk with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+      rcases wakeRun_ends hk' with ⟨rfl, h⟩ | ⟨rfl, h⟩ <;> omega
+
+/-- On a well-formed run of a model of Alice, all assumptions and obligations
+hold together while a live wake, its delivery, a latest-waker epoch and a
+progress opportunity all occur. Rule 1 holds only trivially here, because the
+memory description allows everything. -/
 theorem assumptions_consistent_live :
-    liveModel.IsRunWith id wakeRun ∧
-      Assumptions liveContext id wakeRun ∧ Obligations liveContext id wakeRun := by
-  refine ⟨wakeRun_is_run, ⟨fun _ _ => ⟨trivial, trivial⟩, ?_, ?_⟩, ⟨?_, ?_, ?_⟩⟩
-  · intro i hi j hij hj
-    have := wakeRun_ready hi; have := wakeRun_pollBegin hj; omega
+    liveModel.IsRunWith id wakeRun ∧ WellFormed wakeRun ∧
+      Assumptions liveContext id wakeRun ∧ NoUB wakeRun ∧ CallsMatched wakeRun ∧
+        ProtocolObligations liveContext id wakeRun := by
+  refine ⟨wakeRun_is_run, wakeRun_wellFormed, ⟨fun _ _ => ⟨trivial, trivial⟩, ?_, ?_⟩,
+    fun _ => wakeRun_no_special.1, wakeRun_callsMatched, ⟨?_, ?_⟩⟩
+  · rintro i ⟨c, v, hi⟩ j hij ⟨c', w', hj⟩
+    rcases wakeRun_return hi with ⟨rfl, -, h⟩ | ⟨rfl, -, -⟩
+    · cases h
+    · rcases wakeRun_begin hj with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩ <;> omega
   · intro i w hw _
     obtain ⟨rfl, rfl⟩ := wakeRun_wake hw
     exact ⟨5, by decide, (by decide : (4 : Nat) < 5), rfl⟩
-  · intro i h
-    match i, h with
-    | 0, h | 1, h | 2, h | 3, h | 4, h | 5, h | 6, h | 7, h => simp [wakeRun] at h
-    | k + 8, h => simp [wakeRun] at h
-  · intro i w ⟨b, c, hb, hbeg, hret⟩ k w' hik hnp hk
-    have hi := wakeRun_pending hret
-    subst hi
-    have hw : w = 0 := by
-      match b, hb, hbeg with
-      | 0, _, h => simp [wakeRun] at h
-      | 1, _, h => simp [wakeRun] at h; exact h.2.symm
-    subst hw
-    obtain ⟨rfl, -⟩ := wakeRun_wake hk
-    exact ⟨4, by decide, hnp, rfl⟩
-  · intro i c hi j hij hp hs
-    have := wakeRun_pending hi
-    simp [liveContext] at hp hs
-    by_cases h4 : j ≤ 4
-    · exact ⟨4, h4, .inl ⟨0, rfl⟩⟩
-    · exact ⟨6, by omega, .inr ⟨1, 1, rfl⟩⟩
+  · intro b i w ⟨c, hbi, hb, hi, _, _⟩ k w' hik hnp hk
+    rcases wakeRun_return hi with ⟨rfl, rfl, -⟩ | ⟨rfl, -, h⟩
+    · obtain ⟨rfl, -⟩ := wakeRun_wake hk
+      exact ⟨4, 0, by omega, hnp, rfl, rfl⟩
+    · cases h
+  · intro b i w ⟨c, hbi, hb, hi, _, _⟩ j hij hnp _ _ _
+    rcases wakeRun_return hi with ⟨rfl, rfl, -⟩ | ⟨rfl, -, h⟩
+    · rcases wakeRun_begin hb with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩
+      · refine .inl ⟨4, 0, by decide, fun m c w h1 h2 hm => ?_, rfl, rfl⟩
+        rcases wakeRun_begin hm with ⟨rfl, -, -⟩ | ⟨rfl, -, -⟩ <;> omega
+      · omega
+    · cases h
 
 end RustFuture.Contracts
