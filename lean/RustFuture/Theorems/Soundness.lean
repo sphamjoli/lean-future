@@ -6,6 +6,7 @@ import RustFuture.Contracts.Environment
 import RustFuture.Counterexamples.NonTermination
 import RustFuture.Counterexamples.LostWake
 import RustFuture.Counterexamples.StaleWaker
+import RustFuture.Counterexamples.BusyExecutor
 /-! Trust audit. Every headline theorem must depend on no axioms beyond Lean's
 core (`propext`, `Quot.sound`, `Classical.choice`). CI checks this output. -/
 #print axioms RustFuture.Properties.verification_transfer
@@ -24,3 +25,5 @@ core (`propext`, `Quot.sound`, `Classical.choice`). CI checks this output. -/
 #print axioms RustFuture.Counterexamples.epoch_not_confused
 #print axioms RustFuture.Counterexamples.reusedCall_not_wellFormed
 #print axioms RustFuture.Implementations.pendingTrace_callsMatched
+#print axioms RustFuture.Counterexamples.busy_executor_does_not_hide
+#print axioms RustFuture.Counterexamples.cancellation_discharges

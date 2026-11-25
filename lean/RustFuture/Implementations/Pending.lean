@@ -79,6 +79,10 @@ theorem pendingTrace_wellFormed (α : Type) : WellFormed (pendingTrace α) where
     have hdiv : (i + 1) / 2 = i / 2 := by omega
     refine ⟨i + 1, i / 2, by omega, by omega, Or.inl ⟨.pending, ?_⟩⟩
     rw [pendingTrace_odd (by omega), hdiv]
+  noDropDuringPoll := by
+    intro b c w d _ _ h
+    exfalso
+    unfold pendingTrace at h; split at h <;> simp at h
   nothingAfterTerminal := by
     intro i hT
     exfalso

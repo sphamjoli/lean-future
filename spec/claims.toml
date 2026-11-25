@@ -152,7 +152,7 @@ lean = "RustFuture.Contracts.wakeDelivery_refutable"
 
 [[claim]]
 id = "progress-notifies"
-text = "While a suspension epoch lasts and the future is not dropped, if progress becomes possible and the future is still wanted, a wake equivalent to the latest waker occurs in the epoch, or a new poll ends the epoch"
+text = "If progress becomes possible during a suspension epoch while the future is still wanted, then eventually a wake reaches the task of its current waker, or it completes with Ready, or it is dropped or the program aborts; a new poll alone does not discharge the obligation"
 kind = "contract"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
@@ -201,7 +201,7 @@ lean = "RustFuture.Contracts.SafetyConforms"
 
 [[claim]]
 id = "well-formed-executions"
-text = "Real callers produce well-formed executions: visit numbers are unique, polls do not overlap, and nothing is polled after drop or abort (a caught panic may be followed by another poll)"
+text = "Real callers produce well-formed executions: visit numbers are unique, polls do not overlap, the future is not dropped during a poll, and nothing is polled after drop or abort (a caught panic may be followed by another poll)"
 kind = "type_level"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#tymethod.poll"
@@ -238,3 +238,19 @@ kind = "implementation"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
 lean = "RustFuture.Properties.SenderEventuallyPays"
+
+[[claim]]
+id = "busy-executor-does-not-hide"
+text = "A future polled for ever that always returns Pending and never wakes, while progress is possible, violates ProgressNotifies"
+kind = "contract"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Counterexamples.busy_executor_does_not_hide"
+
+[[claim]]
+id = "cancellation-discharges"
+text = "Dropping a suspended future after progress becomes possible discharges its notification obligation"
+kind = "permitted"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html"
+lean = "RustFuture.Counterexamples.cancellation_discharges"

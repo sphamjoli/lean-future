@@ -4,6 +4,7 @@ import RustFuture.Contracts.Environment
 import RustFuture.Contracts.Executor
 import RustFuture.Contracts.Future
 import RustFuture.Contracts.Witness
+import RustFuture.Counterexamples.BusyExecutor
 import RustFuture.Counterexamples.LostWake
 import RustFuture.Counterexamples.NonTermination
 import RustFuture.Counterexamples.StaleWaker

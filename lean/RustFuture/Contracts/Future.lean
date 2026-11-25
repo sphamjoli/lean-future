@@ -35,12 +35,14 @@ def SuspendedFrom {α : Type} (t : Trace α) (b i : Nat) (w : WakerId) : Prop :=
     NoPollBetween t b i ∧ ∀ m, b < m → m < i → ¬ EndsAt t m c
 
 /-- Latest-waker clause, per epoch. If any wake happens while the future is
-suspended (after a `Pending` return and before the next visit), then some wake
-in the same epoch, possibly issued during the visit itself, targets the same
-task as the latest visit's waker. -/
+suspended (after a `Pending` return, before the next visit, and before the
+future is dropped or the program aborts), then some wake in the same epoch,
+possibly issued during the visit itself, targets the same task as the latest
+visit's waker. -/
 def WakesLatest {α : Type} (E : WakerEnv) (t : Trace α) : Prop :=
   ∀ b i w, SuspendedFrom t b i w →
-    ∀ k w', i < k → NoPollBetween t i k → t k = .wake w' →
+    ∀ k w', i < k → NoPollBetween t i k → (∀ m, i < m → m ≤ k → ¬ TerminalAt t m) →
+      t k = .wake w' →
       ∃ k' w'', b < k' ∧ NoPollBetween t i k' ∧ t k' = .wake w'' ∧ WakeEquivalent E w'' w
 
 end RustFuture.Contracts
