@@ -1,10 +1,29 @@
-# Rust Futures, Explained and Modelled in Lean
+# A Formalisation of Rust's `Future` Trait in Lean
 
 ![Status: proof of concept](https://img.shields.io/badge/status-proof%20of%20concept-orange) ![Academic prototype](https://img.shields.io/badge/academic-prototype-blue) ![Lean 4](https://img.shields.io/badge/Lean-4.36-purple) ![Rust 1.97.1](https://img.shields.io/badge/Rust-1.97.1-brown)
 
 > **Academic prototype.** This is a research proof of concept. It is not a verified library, it makes no guarantees about any production Rust code, and parts of the model are still open work, as marked throughout.
 
-This project describes, precisely, how a piece of Rust code that *waits for something* is supposed to behave. It writes that description in Lean, a language in which a computer checks every step of a mathematical argument. The code in question is async Rust, Rust's way of writing code that waits without holding up a whole thread.
+This project is an attempt to formalise the `Future` trait of the Rust standard library, as documented for Rust 1.97.1. A *trait* in Rust is a named set of operations that a type promises to provide. The documentation defines `Future` as follows:
+
+```rust
+pub trait Future {
+    type Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
+}
+```
+
+The documentation opens: *A future represents an asynchronous computation, commonly obtained by use of `async`.* An *asynchronous computation* is one that may not have finished yet, and `async` is the Rust keyword that turns ordinary code into a future. The definition has two parts:
+
+- `type Output` names the type of the result the future produces once it finishes.
+- `poll` asks the future to make progress. Its input `self: Pin<&mut Self>` is the future itself, held at a fixed place in memory so that it may safely refer to its own parts. Its input `cx` is a *context*, which carries the call-back card described below. Its answer `Poll<Self::Output>` is either `Poll::Ready(result)`, with the finished result, or `Poll::Pending`, meaning *not yet*.
+
+Code built from futures is called *async Rust*, Rust's way of writing code that waits without holding up a whole thread.
+
+Rust itself checks only this definition's types: what goes in and what comes out. The trait's documentation also says how `poll` must behave over time, such as when a future may be polled again, what it must arrange before answering `Pending`, and what may happen after it answers `Ready`. Those rules are written in English, and nothing checks them. This project restates them in Lean, a language in which a computer checks every step of a mathematical argument.
+
+To *formalise* the trait here means three things. Each behavioural sentence of the documentation becomes a named Lean definition. Each definition is tested, where possible by proof, against futures that keep it and futures that break it. Each is traced to the documentation sentence it comes from. The attempt is partial: it does not yet cover every sentence, it is not yet connected to compiled Rust code, and where the documentation is silent the model stays silent rather than guess.
 
 Build and toolchain instructions are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
@@ -44,7 +63,7 @@ The model has to strike a balance. Too weak, and it cannot catch real bugs. Too 
 
 ## What verification means here
 
-What counts as *verification* is a choice, and this project's choice may change as the work grows. Other things being equal, that is, unless the project's scope or Rust itself changes, the definitions below stay fixed, and any change will be recorded with its reason. **At present, this project defines correctness, verification and soundness as follows.** Each definition follows an established framework from the literature on formal methods, the mathematical techniques for proving software correct, cited in brackets and listed under References.
+What counts as *verification* is a choice. Other things being equal, that is, unless the scope or Rust itself changes, the definitions below stay fixed. **At present, this project defines correctness, verification and soundness as follows.** Each definition follows an established framework from the literature on formal methods, the mathematical techniques for proving software correct, cited in brackets and listed under References.
 
 ### The framework
 
@@ -68,8 +87,9 @@ Here $\mathrm{Traces}(R)$ is the set of all event sequences that real runs of $R
 |---|---|
 | Claim | One statement about how a future behaves |
 | Proved | Lean has checked a complete proof of the claim from the rules |
-| Witnessed | A real Rust program shows the behaviour the claim describes. This proves the behaviour *can* happen, never that it *always* does |
-| Open | Neither proved nor witnessed; never reported as anything stronger |
+| Modelled | The claim is written precisely in Lean, but nothing has yet been proved about it |
+| Assumed | The claim is taken as given from outside the model |
+| Open | Not proved in Lean. Where a real Rust program shows the behaviour, the claim is marked *shown in Rust*; such a program proves the behaviour *can* happen, never that it *always* does |
 | Correct | A model of a future is correct when every trace meeting the assumptions also meets the guarantees; in Lean this is `Conforms` |
 | Verified | A Rust future is verified when it refines a model that is correct |
 | Validated | A rule is validated when it matches the pinned Rust documentation and no real Rust program shows it to be too strong |
@@ -91,7 +111,7 @@ A proof checked by Lean is only as trustworthy as everything beneath it. The set
 |---|---|---|---|
 | 1. Logic | Lean's logic (its *type theory*, the formal system Lean's proofs are written in) together with three standard axioms (statements Lean accepts without proof): *propositional extensionality* (two statements that imply each other are equal), *quotient soundness* (a technical rule for treating equivalent objects as the same) and the *axiom of choice* (if something exists, one can be picked) | Any statement could be proved, true or false | These are standard, widely used and studied foundations. Each headline theorem's axioms are printed during the build, and continuous integration (the automatic checks run on every change) fails if anything beyond these three appears |
 | 2. Proof checker | Lean's *kernel*, the small core that checks every proof step (de Moura and Ullrich, 2021) | A wrong proof could be accepted | The kernel is small and separate from the parts of Lean that help write proofs. Proofs are not yet re-checked by an independent second checker |
-| 3. Rule wording | That each Lean rule says what its plain-language version says | A proof would be correct about the wrong statement | Each rule is shown here next to its Lean form with a walkthrough, and tied to the Rust documentation |
+| 3. Rule wording | That each Lean rule says what its plain-language version says | A proof would be correct about the wrong statement | Each rule is stated in plain language beside its Lean form, and tied to the Rust documentation |
 | 4. Outside descriptions | The descriptions of Rust's memory rules (Rule 1), of Bob (Rule 3) and of Charlie's world (Rule 4) | A result could rest on an impossible or unrealistic environment | Each one is an explicit input to every theorem that uses it, never a hidden axiom. Well-studied models exist to supply the memory rules (Jung et al., 2018) |
 | 5. Model of the code | That the Lean model $M$ describes the real future $R$, through the mapping $\pi$ | Proofs would hold for a description, not for the code | The refinement proof; not yet done |
 | 6. Translation | Once refinement is attempted, the tool that translates Rust into Lean, such as Aeneas (Ho and Protzenko, 2022) | The Lean version could differ from the code that runs | Out of scope until refinement begins |
@@ -108,7 +128,7 @@ Levels 1 and 2 concern the *proof method*. Levels 3 to 6 concern the *model*, wh
 
 ### Events: what an observer can see
 
-The model records everything that happens as a sequence of *events*. Here is the full list of event kinds as written in Lean, followed by a walkthrough.
+The model records everything that happens as a sequence of *events*. Here is the full list of event kinds as written in Lean, each explained below.
 
 ```lean
 inductive Event (α : Type) where
@@ -200,6 +220,11 @@ def TerminalAt {α : Type} (t : Trace α) (i : Nat) : Prop :=
 ```
 
 ```lean
+def PollBeginAt {α : Type} (t : Trace α) (i : Nat) : Prop :=
+  ∃ c w, t i = .pollBegin c w
+```
+
+```lean
 structure WellFormed {α : Type} (t : Trace α) : Prop where
   -- each visit number is used by at most one visit
   uniqueCalls : ∀ i j c w w', t i = .pollBegin c w → t j = .pollBegin c w' → i = j
@@ -215,7 +240,7 @@ structure WellFormed {α : Type} (t : Trace α) : Prop where
   nothingAfterTerminal : ∀ i, TerminalAt t i → ∀ j, i < j → ¬ PollBeginAt t j
 ```
 
-`EndsAt t k c` says visit `c` ends at position $k$, either by returning an answer or by panicking. `TerminalAt t i` says that at position $i$ Alice is thrown away or the whole program aborts. A panic is not terminal, because safe Rust can catch a panic and poll again. `WellFormed t` has four parts: each visit number is used by only one visit; whenever two visits begin, some visit ends in between, so visits never overlap; Alice is not thrown away while a visit is still holding her, because a visit borrows her exclusively (the whole program may still abort mid-visit); and once Alice is dropped or the program aborts, no visit begins again.
+`EndsAt t k c` says visit `c` ends at position $k$, either by returning an answer or by panicking. `TerminalAt t i` says that at position $i$ Alice is thrown away or the whole program aborts. `PollBeginAt t i` says that at position $i$ some visit $c$ begins with some card $w$. A panic is not terminal, because safe Rust can catch a panic and poll again. `WellFormed t` has four parts: each visit number is used by only one visit; whenever two visits begin, some visit ends in between, so visits never overlap; Alice is not thrown away while a visit is still holding her, because a visit borrows her exclusively (the whole program may still abort mid-visit); and once Alice is dropped or the program aborts, no visit begins again.
 
 ```lean
 structure CallsMatched {α : Type} (t : Trace α) : Prop where
@@ -254,7 +279,7 @@ None of these is a Lean `axiom`, a statement Lean accepts without proof. Each is
 
 ![Which outside party supplies each assumption, and what Alice owes in return](diagrams/model-boundary.png)
 
-Each rule carries a status taken from the project's claim catalogue. **Proved** means Lean has checked a complete proof. **Modelled** means the rule is written precisely in Lean but nothing has yet been proved about it. **Assumed** means it is taken as given from outside.
+Each rule carries a status taken from the project's claim catalogue. **Proved** means Lean has checked a complete proof. **Modelled** means the rule is written precisely in Lean but nothing has yet been proved about it. **Assumed** means it is taken as given from outside. **Open** means it is not yet proved.
 
 ### Rule 1 (assumption): only Bob touches Alice, and she does not move
 
@@ -276,6 +301,11 @@ structure AccessModel (σ : Type) where
 
 `PinModel` is a description of Rust's memory rules, supplied from outside this project. `extends AccessModel σ` means it also contains every part of `AccessModel`, which has a single part, `exclusiveAccess : σ → Prop`: *does only Bob have hold of Alice in this state?* `isUnpin` is the statement *Alice's type is Unpin*. `pinValid s` is *Alice's pinning promise holds in state* $s$. `unpin_trivial` requires that, if Alice is Unpin, her pinning promise holds in every state.
 
+```lean
+def PinModel.ValidPoll {σ : Type} (P : PinModel σ) (s : σ) : Prop :=
+  P.exclusiveAccess s ∧ P.pinValid s
+```
+
 `ValidPoll` reads: in state $s$, Alice has exclusive access and her pinning promise holds.
 
 *Status: assumed.* Rust's memory rules are taken as given. Rust's further promise that a pinned value stays put until it is thrown away is not represented in this model.
@@ -291,7 +321,7 @@ def ReadyAt {α : Type} (t : Trace α) (i : Nat) : Prop :=
   ∃ c v, t i = .pollReturn c (.ready v)
 ```
 
-`ReadyAt t i`: at position $i$, some visit $c$ ended with Ready and some result $v$. `PollBeginAt t i`: at position $i$, some visit $c$ began with some card $w$.
+`ReadyAt t i`: at position $i$, some visit $c$ ended with Ready and some result $v$.
 
 ```lean
 def CallerStopsAtReady {α : Type} (t : Trace α) : Prop :=
@@ -508,17 +538,17 @@ Two proofs show the rules are *consistent*, meaning they can all hold at once on
 
 ## What the rules deliberately do not say
 
-Each statement below sounds reasonable, and each is false for real Rust. The model must leave room for all of them. Each one is shown by a real Rust program, and some are also proved in Lean.
+Each statement below sounds reasonable, and each is false for real Rust. The model must leave room for all of them. Each one is shown by a real Rust program. Two are also proved in Lean; the rest are open, marked *shown in Rust*.
 
 | Tempting statement | Why it is false | Lean status |
 |---|---|---|
 | Every future eventually finishes | Rust's standard `pending` future waits forever | Proved |
 | *Not yet* means a call-back will come | A story with Pending and no card ever used is allowed | Proved |
-| Every future uses its card | Rust's standard `ready` future finishes on the first visit without touching it | Rust only |
-| A call-back means the next answer is Ready | A future may use its own card and still answer Pending next time | Rust only |
-| *Ready* is final and polling again is harmless | Async functions generated by the Rust compiler panic when polled again; this is the behaviour of the pinned compiler release, not a documented promise | Rust only |
-| Ready means success | The result can itself be an error | Rust only |
-| Throwing Alice away undoes what she did | Effects on the outside world remain | Rust only |
+| Every future uses its card | Rust's standard `ready` future finishes on the first visit without touching it | Open, shown in Rust |
+| A call-back means the next answer is Ready | A future may use its own card and still answer Pending next time | Open, shown in Rust |
+| *Ready* is final and polling again is harmless | Async functions generated by the Rust compiler panic when polled again; this is the behaviour of the pinned compiler release, not a documented promise | Open, shown in Rust |
+| Ready means success | The result can itself be an error | Open, shown in Rust |
+| Throwing Alice away undoes what she did | Effects on the outside world remain | Open, shown in Rust |
 
 The model must also be strong enough to reject faulty behaviour. The newest-card promise rejects a story in which only an old card is used, and that rejection is proved. The next section goes further and checks one real future from start to finish.
 
@@ -582,6 +612,14 @@ structure OneshotState where
 The state records whether the parcel is in the slot, which card the slot holds, the card from the most recent visit, whether Alice last answered Pending, whether she has finished, whether the sender has delivered, which card the sender has taken and not yet used, and whether the newest card has been used since the last visit. Each `--` line above a field is a comment explaining it.
 
 ```lean
+inductive Variant where
+  | correct
+  | buggy
+```
+
+`Variant` names the two versions of Alice: `correct` and `buggy`, the faulty one.
+
+```lean
 def registerOnPoll : Variant → Option Nat → Nat → Option Nat
   | .correct, _, n => some n
   | .buggy, none, n => some n
@@ -612,7 +650,7 @@ inductive Reachable (v : Variant) : OneshotState → Prop where
   | step {s s' : OneshotState} : Reachable v s → Step v s s' → Reachable v s'
 ```
 
-A state is *reachable* if the machine can get there from the starting state by a sequence of steps.
+`.init` is the starting state: no parcel, no card stored, no visit yet, nothing delivered. A state is *reachable* if the machine can get there from the starting state by a sequence of steps.
 
 A poll is a single step here because the Rust code holds the lock for the whole check-and-register. Nothing else can touch the slot during it, so no poll is ever half-done, and the *visit under way* case of `NoLostWakeup` never applies to this machine.
 
@@ -621,6 +659,8 @@ A poll is a single step here because the Rust code holds the lock for the whole 
 ```lean
 theorem buggy_reaches_lostState : Reachable .buggy lostState
 ```
+
+`lostState` is the state in which the parcel sits in the slot, the sender has delivered, Alice last answered Pending, and no card is held by anyone: the sender used the old card, and Alice never stored the new one.
 
 ```lean
 theorem buggy_violates_noLostWakeup :
@@ -674,7 +714,7 @@ The model can also be read as a system: parts connected by flows of information.
 
 **Delays.** There are two. Between a card being used and Bob's next check, any amount of time may pass; the model promises the check comes, never when, because a deadline would be stronger than Rust. Between the start and the end of a visit, other events can happen, which is why a visit is two events rather than one.
 
-**The edge of the model.** Every model draws a line between what it describes and what it takes as given, and a badly drawn line hides causes. This model describes the call-back protocol and Alice's promises. It takes Rust's memory rules, Bob's scheduling and Charlie's world as given. It does not describe timing, fairness between tasks, or performance. Two rules are recorded but not yet stated: that Alice answers quickly instead of holding Bob up, and exactly what must hold when Alice is thrown away midway.
+**The edge of the model.** Every model draws a line between what it describes and what it takes as given, and a badly drawn line hides causes. This model describes the call-back protocol and Alice's promises. It takes Rust's memory rules, Bob's scheduling and Charlie's world as given. It does not describe timing, fairness between tasks, or performance. Two behaviours are not yet modelled: that Alice answers quickly instead of holding Bob up, and exactly what must hold when Alice is thrown away midway.
 
 ## Checking the model against Rust
 
