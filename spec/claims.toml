@@ -81,7 +81,7 @@ lean = "RustFuture.Contracts.CallerStopsAtReady"
 
 [[claim]]
 id = "latest-waker"
-text = "If the future wakes while suspended, the most recent poll's waker is among those woken"
+text = "If any wake occurs in a suspension epoch, some wake in that epoch (possibly during the poll) targets the same task as the most recent poll's waker"
 kind = "contract"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
@@ -97,7 +97,7 @@ lean = "RustFuture.Counterexamples.stale_violates_latest"
 
 [[claim]]
 id = "wake-delivery"
-text = "While the executor runs and the task is unfinished, a wake is followed by at least one poll of that task (happens-before is an executor-model refinement)"
+text = "While the executor runs and the task is unfinished, a wake is followed by at least one poll of that task that the wake happens before (happens-before is supplied by the executor model, must chain and point forwards, and is not derived from trace order)"
 kind = "executor"
 status = "assumed"
 source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
@@ -112,7 +112,7 @@ source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#runtime-
 
 [[claim]]
 id = "no-lost-wakeup"
-text = "Suspended and value available implies the latest waker was notified or a poll is in flight"
+text = "Suspended and value available implies the latest waker was notified, a poll is in flight, or the sender still owes a notification"
 kind = "implementation"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
@@ -152,7 +152,7 @@ lean = "RustFuture.Contracts.wakeDelivery_refutable"
 
 [[claim]]
 id = "progress-notifies"
-text = "After Pending, if progress becomes possible while the future is still wanted, a wake or a new poll eventually follows"
+text = "While a suspension epoch lasts and the future is not dropped, if progress becomes possible and the future is still wanted, a wake equivalent to the latest waker occurs in the epoch, or a new poll ends the epoch"
 kind = "contract"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
@@ -182,3 +182,59 @@ kind = "contract"
 status = "proved"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html"
 lean = "RustFuture.Contracts.assumptions_consistent_live"
+
+[[claim]]
+id = "will-wake-equivalence"
+text = "A future may keep an older waker that wakes the same task (Waker::will_wake); WakesLatest accepts waking only that older waker"
+kind = "permitted"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.will_wake"
+lean = "RustFuture.Counterexamples.will_wake_accepted"
+
+[[claim]]
+id = "safety-independent-of-protocol"
+text = "Memory safety is required on every well-formed run with valid access, even if the caller or executor breaks the protocol"
+kind = "contract"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#panics"
+lean = "RustFuture.Contracts.SafetyConforms"
+
+[[claim]]
+id = "well-formed-executions"
+text = "Real callers produce well-formed executions: visit numbers are unique, polls do not overlap, and nothing is polled after drop or abort (a caught panic may be followed by another poll)"
+kind = "type_level"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#tymethod.poll"
+lean = "RustFuture.WellFormed"
+
+[[claim]]
+id = "pending-trace-well-formed"
+text = "The canonical run of the pending model is well formed"
+kind = "implementation"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/fn.pending.html"
+lean = "RustFuture.Implementations.pendingTrace_wellFormed"
+
+[[claim]]
+id = "calls-matched"
+text = "A future's returns and panics each answer an earlier visit, and each visit ends at most once (required as part of safety, not assumed)"
+kind = "contract"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#tymethod.poll"
+lean = "RustFuture.CallsMatched"
+
+[[claim]]
+id = "epoch-not-confused"
+text = "A reused visit number cannot make a wake from an earlier epoch count for a later one"
+kind = "contract"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Counterexamples.epoch_not_confused"
+
+[[claim]]
+id = "sender-eventually-pays"
+text = "Whenever the oneshot sender owes a notification, the latest waker is later notified (companion to no-lost-wakeup)"
+kind = "implementation"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
+lean = "RustFuture.Properties.SenderEventuallyPays"
