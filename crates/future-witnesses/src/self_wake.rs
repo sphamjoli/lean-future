@@ -15,12 +15,12 @@ pub fn yield_times(n: u32) -> YieldTimes {
 
 impl Future for YieldTimes {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<()> {
         if self.remaining == 0 {
             return Poll::Ready(());
         }
         self.remaining -= 1;
-        cx.waker().wake_by_ref();
+        context.waker().wake_by_ref();
         Poll::Pending
     }
 }

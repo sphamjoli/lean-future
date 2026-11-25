@@ -5,33 +5,35 @@ use trace_recorder::{Config, Event, PollResult, Schedule, ready_count, record};
 
 #[test]
 fn pending_never_completes() {
-    let t = record(
+    let trace = record(
         pending::<u32>(),
         Config {
             schedule: Schedule::Always,
             ..Config::default()
         },
     );
-    assert_eq!(ready_count(&t), 0, "refutes: every future terminates");
+    assert_eq!(ready_count(&trace), 0, "refutes: every future terminates");
 }
 
 #[test]
 fn ready_completes_without_wake() {
-    let t = record(ready(42), Config::default());
+    let trace = record(ready(42), Config::default());
     assert!(
-        !t.iter().any(|e| matches!(e, Event::Wake { .. })),
+        !trace
+            .iter()
+            .any(|event| matches!(event, Event::Wake { .. })),
         "refutes: futures must register/use a waker"
     );
-    assert_eq!(ready_count(&t), 1);
+    assert_eq!(ready_count(&trace), 1);
 }
 
 #[test]
 fn self_wake_then_pending_again() {
-    let t = record(self_wake::yield_times(2), Config::default());
+    let trace = record(self_wake::yield_times(2), Config::default());
     // wake → poll → Pending: a wake does not imply the next poll is Ready.
-    let returns: Vec<_> = t
+    let returns: Vec<_> = trace
         .iter()
-        .filter_map(|e| match e {
+        .filter_map(|event| match event {
             Event::PollReturn { result, .. } => Some(result.clone()),
             _ => None,
         })
@@ -42,7 +44,7 @@ fn self_wake_then_pending_again() {
 
 #[test]
 fn repoll_after_ready_panics_without_ub() {
-    let t = record(
+    let trace = record(
         repoll_panics::once(7u8),
         Config {
             schedule: Schedule::Always,
@@ -51,16 +53,16 @@ fn repoll_after_ready_panics_without_ub() {
         },
     );
     assert!(
-        matches!(t.last(), Some(Event::Panic { call: 1 })),
+        matches!(trace.last(), Some(Event::Panic { call: 1 })),
         "refutes: Ready is absorbing / re-poll idempotent"
     );
 }
 
 #[test]
 fn ready_is_not_success() {
-    let t = record(err_result::always_err(), Config::default());
+    let trace = record(err_result::always_err(), Config::default());
     assert!(
-        matches!(&t[2], Event::PollReturn { result: PollResult::Ready(s), .. } if s.starts_with("Err"))
+        matches!(&trace[2], Event::PollReturn { result: PollResult::Ready(s), .. } if s.starts_with("Err"))
     );
 }
 
@@ -101,14 +103,17 @@ fn counting_waker() -> (std::task::Waker, Counter) {
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
-    struct W(Arc<AtomicUsize>);
-    impl std::task::Wake for W {
+    struct CountingWake(Arc<AtomicUsize>);
+    impl std::task::Wake for CountingWake {
         fn wake(self: Arc<Self>) {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
     }
-    let n = Arc::new(AtomicUsize::new(0));
-    (std::task::Waker::from(Arc::new(W(n.clone()))), Counter(n))
+    let count = Arc::new(AtomicUsize::new(0));
+    (
+        std::task::Waker::from(Arc::new(CountingWake(count.clone()))),
+        Counter(count),
+    )
 }
 struct Counter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
 impl Counter {
@@ -124,11 +129,11 @@ fn drop_does_not_undo_effects() {
         atomic::{AtomicUsize, Ordering},
     };
     let counter = Arc::new(AtomicUsize::new(0));
-    let t = record(
+    let trace = record(
         drop_effects::effect_then_pending(counter.clone()),
         Config::default(),
     );
-    assert!(matches!(t.last(), Some(Event::Drop)));
+    assert!(matches!(trace.last(), Some(Event::Drop)));
     assert_eq!(
         counter.load(Ordering::SeqCst),
         1,
@@ -143,7 +148,7 @@ fn async_fn_repoll_panics() {
     async fn answer() -> u8 {
         42
     }
-    let t = record(
+    let trace = record(
         answer(),
         Config {
             schedule: Schedule::Always,
@@ -151,5 +156,5 @@ fn async_fn_repoll_panics() {
             ..Config::default()
         },
     );
-    assert!(matches!(t.last(), Some(Event::Panic { call: 1 })));
+    assert!(matches!(trace.last(), Some(Event::Panic { call: 1 })));
 }

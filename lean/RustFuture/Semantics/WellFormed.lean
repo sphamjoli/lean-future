@@ -24,6 +24,10 @@ structure WellFormed {α : Type} (t : Trace α) : Prop where
   -- visit is left to `CallsMatched`, since end events are the future's output)
   noOverlap : ∀ i c w j c' w', i < j → t i = .pollBegin c w → t j = .pollBegin c' w' →
     ∃ k c'', i < k ∧ k < j ∧ EndsAt t k c''
+  -- the future is not dropped while a visit holds it (the visit borrows it
+  -- exclusively); the program as a whole may still abort mid-visit
+  noDropDuringPoll : ∀ b c w d, b < d → t b = .pollBegin c w → t d = .drop →
+    ∃ k c'', b < k ∧ k < d ∧ EndsAt t k c''
   -- nothing is polled after the future is dropped or the program aborts
   nothingAfterTerminal : ∀ i, TerminalAt t i → ∀ j, i < j → ¬ PollBeginAt t j
 

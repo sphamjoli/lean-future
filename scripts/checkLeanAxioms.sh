@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Fails if a Lean build log shows a `sorry` warning, or if any `#print axioms`
+# Fails if a Lean build log shows an error or a `sorry` warning, or if any `#print axioms`
 # line in Theorems/Soundness.lean reports an axiom outside Lean's core trio
 # (propext, Quot.sound, Classical.choice). This is the mechanical form of the
 # rule "distinguish what was proved from what was trusted".
@@ -10,6 +10,12 @@ set -euo pipefail
 
 log="${1:?usage: checkLeanAxioms.sh <lake build log>}"
 status=0
+
+if grep -qE '(^|: )error' "$log"; then
+  echo "checkLeanAxioms: build log contains errors:" >&2
+  grep -E '(^|: )error' "$log" >&2
+  status=1
+fi
 
 if grep -q "declaration uses 'sorry'" "$log"; then
   echo "checkLeanAxioms: build contains sorry:" >&2

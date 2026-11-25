@@ -82,7 +82,7 @@ theorem assumptions_consistent :
   · exact fun _ _ => ⟨trivial, trivial⟩
   · rintro i ⟨c, v, h⟩; unfold Implementations.pendingTrace at h; split at h <;> simp at h
   · intro i w h; unfold Implementations.pendingTrace at h; split at h <;> simp at h
-  · intro b i w _ k w' _ _ h; unfold Implementations.pendingTrace at h; split at h <;> simp at h
+  · intro b i w _ k w' _ _ _ h; unfold Implementations.pendingTrace at h; split at h <;> simp at h
   · exact progressNotifies_of_no_progress _ _ _ _ (fun _ h => h)
 
 end RustFuture.Contracts

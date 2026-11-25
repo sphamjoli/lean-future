@@ -66,7 +66,7 @@ Pull-request (PR) branches are named `spha/<topic>`. Commit messages and PR titl
 
 ## Continuous integration
 
-On every push to main and every pull request, CI runs rustfmt; clippy and the witness suite; the Lean build with the axiom audit; the catalogue lint; and rustdoc with warnings treated as errors. A summary job fails the run if any of these fail. A separate PR workflow scans for secrets with gitleaks, checks the PR title and applies path-based labels, then posts one summary comment. A labels workflow syncs the repository's labels from the checked-in definition, and Dependabot keeps the pinned GitHub Actions up to date.
+On every push to main and every pull request, CI runs rustfmt; clippy and the witness suite; the Lean build with the axiom audit, which fails on any build error, `sorry` or extra axiom; the catalogue lint; rustdoc with warnings treated as errors; and actionlint on the workflows. A summary job fails the run if any of these fail. A separate PR workflow scans the commit history for secrets with gitleaks (a pull request's own commits, or the full history on a push to main), checks the PR title and applies path-based labels, then posts one summary comment. A labels workflow syncs the repository's labels from the checked-in definition, and Dependabot keeps the pinned GitHub Actions and the Rust dependencies up to date.
 
 ## Re-pinning to a new Rust release
 
