@@ -32,7 +32,7 @@ Using a card is called a *wake*. Bob may visit Alice many times, and he may hand
 
 The diagram shows the loop. Bob checks. Alice answers *not yet* and passes the newest card to Charlie. The parcel arrives, perhaps much later, perhaps never. Charlie uses the card, and Bob checks again. The red boxes are the two classic ways the loop breaks.
 
-**The lost call-back.** Alice looks for the parcel and finds nothing. In the brief moment before she hands over her card, the parcel arrives and Charlie, holding no card, simply leaves. Alice then hands over a card that nobody will ever use. She now waits forever for a parcel that is already sitting at her door. The cure is to look and hand over the card as one indivisible step, so nothing can slip in between them.
+**The lost call-back.** Alice looks for the parcel and finds nothing. In the brief moment before she hands over her card, the parcel arrives and Charlie, holding no card, leaves. Alice then hands over a card that nobody will ever use. She now waits forever for a parcel that is already sitting at her door. The cure is to look and hand over the card as one indivisible step, so nothing can slip in between them.
 
 **The old card.** Charlie still holds a card from an earlier visit and uses only that one. The old card may point at a place Bob has since stopped watching, so Alice may never be checked again. The cure is for Alice to always give Charlie the newest card.
 
@@ -58,7 +58,7 @@ What counts as *verification* is a choice, and this project's choice may change 
 
 $$\pi(\mathrm{Traces}(R)) \subseteq \mathrm{Traces}(M)$$
 
-Here $\mathrm{Traces}(R)$ is the set of all event sequences that real runs of $R$ can produce, and $\mathrm{Traces}(M)$ is the set the model allows. $\pi$ (Greek *pi*) is the translation, called a *refinement mapping*, from what the Rust program actually does to events in the model's vocabulary. The symbol $\subseteq$ means *is contained in*: everything on the left also appears on the right. If refinement holds and $M$ is correct with respect to the rules, then $R$ is too, because every behaviour of $R$ is one that has already been shown to keep the rules. For the liveness rules this only works if $\pi$ never hides an execution that runs forever, since that would let a program that hangs look like one that finishes.
+Here $\mathrm{Traces}(R)$ is the set of all event sequences that real runs of $R$ can produce, and $\mathrm{Traces}(M)$ is the set the model allows. $\pi$ (Greek *pi*) is the translation, called a *refinement mapping*, from what the Rust program does to events in the model's vocabulary. The symbol $\subseteq$ means *is contained in*: everything on the left also appears on the right. If refinement holds and $M$ is correct with respect to the rules, then $R$ is too, because every behaviour of $R$ is one that has already been shown to keep the rules. For the liveness rules this only works if $\pi$ never hides an execution that runs forever, since that would let a program that hangs look like one that finishes.
 
 **Verification is not validation.** Checking that a program meets its rules is *verification*; checking that the rules are the right ones is *validation* (Boehm, 1984). Boehm's short forms are *building the product right* and *building the right product*. Proofs in Lean can only do the first. For this project, validation means checking that the rules say exactly what Rust's documentation promises, which is why every rule is tied to a sentence in that documentation and every rejected rule is backed by a real Rust program.
 
@@ -80,7 +80,7 @@ Each kind of doubt is removed by a different kind of evidence, and the work is a
 | Doubt | Removed by | Where it stands |
 |---|---|---|
 | Do the rules say what Rust says? (validation) | Ties to the Rust documentation, and Rust programs for every rejected rule | In place for the rules on this page |
-| Does a model keep the rules? (correctness) | A Lean proof that every well-formed trace of the model meets the guarantees | Full conformance not yet proved for any model. One all-traces result exists: every trace of the always-Pending model is free of harm and never Ready. Other proofs check individual example traces and show that the rules can all be met together |
+| Does a model keep the rules? (correctness) | A Lean proof that every well-formed trace of the model meets the guarantees | Full conformance not yet proved for any model. For the oneshot channel, the correct receiver is proved never to lose a call-back in any reachable state, and to get its call-back under a fair sender; the faulty receiver is proved to lose one. Every trace of the always-Pending model is free of harm and never Ready |
 | Does the code match the model? (refinement) | A refinement proof | Not started |
 
 ### Soundness assumptions, level by level
@@ -159,7 +159,7 @@ abbrev Trace (α : Type) := Nat → Event α
 
 `abbrev` introduces a shorthand name. `Nat` is the natural numbers $0, 1, 2, \ldots$. The arrow `→` between types means *a function from … to …*: give it a position and it gives back the event at that position.
 
-A trace goes on forever on purpose. If it stopped, the model could not tell *Alice finished* apart from *we stopped watching before she finished*. A story whose work is done simply carries on with `internal` events.
+A trace goes on forever on purpose. If it stopped, the model could not tell *Alice finished* apart from *we stopped watching before she finished*. A story whose work is done carries on with `internal` events.
 
 Throughout, `t` names a trace. Writing two names side by side means applying a function to an input, so `t i` means *the event at position $i$ of trace $t$*.
 
@@ -207,11 +207,15 @@ structure WellFormed {α : Type} (t : Trace α) : Prop where
   -- visit is left to `CallsMatched`, since end events are the future's output)
   noOverlap : ∀ i c w j c' w', i < j → t i = .pollBegin c w → t j = .pollBegin c' w' →
     ∃ k c'', i < k ∧ k < j ∧ EndsAt t k c''
+  -- the future is not dropped while a visit holds it (the visit borrows it
+  -- exclusively); the program as a whole may still abort mid-visit
+  noDropDuringPoll : ∀ b c w d, b < d → t b = .pollBegin c w → t d = .drop →
+    ∃ k c'', b < k ∧ k < d ∧ EndsAt t k c''
   -- nothing is polled after the future is dropped or the program aborts
   nothingAfterTerminal : ∀ i, TerminalAt t i → ∀ j, i < j → ¬ PollBeginAt t j
 ```
 
-`EndsAt t k c` says visit `c` ends at position $k$, either by returning an answer or by panicking. `TerminalAt t i` says that at position $i$ Alice is thrown away or the whole program aborts. A panic is not terminal, because safe Rust can catch a panic and poll again. `WellFormed t` has three parts: each visit number is used by only one visit; whenever two visits begin, some visit ends in between, so visits never overlap; and once Alice is dropped or the program aborts, no visit begins again.
+`EndsAt t k c` says visit `c` ends at position $k$, either by returning an answer or by panicking. `TerminalAt t i` says that at position $i$ Alice is thrown away or the whole program aborts. A panic is not terminal, because safe Rust can catch a panic and poll again. `WellFormed t` has four parts: each visit number is used by only one visit; whenever two visits begin, some visit ends in between, so visits never overlap; Alice is not thrown away while a visit is still holding her, because a visit borrows her exclusively (the whole program may still abort mid-visit); and once Alice is dropped or the program aborts, no visit begins again.
 
 ```lean
 structure CallsMatched {α : Type} (t : Trace α) : Prop where
@@ -330,7 +334,7 @@ def WakeDelivery {α : Type} (X : ExecutorModel α) (t : Trace α) : Prop :=
 
 `WakeDelivery` reads: for every position $i$ and card $w$, if card $w$ is used at $i$, and its task is live at that moment, then there is a later position $j$ where Bob picks up that same task, and $i$ happens before $j$.
 
-A proof checks that this rule can actually fail: a used card on a live task, with no later pick-up, breaks it.
+A proof checks that this rule can fail: a used card on a live task, with no later pick-up, breaks it.
 
 *Status: assumed.* One gap remains. A description of Bob may still declare every task finished from the start, in which case the rule never applies. The simpler of the two consistency witnesses below does exactly that. Closing the gap needs a concrete executor.
 
@@ -362,7 +366,11 @@ def NoPollBetween {α : Type} (t : Trace α) (i k : Nat) : Prop :=
 
 ### Rule 4 (promise): if the parcel arrives, someone must hear about it
 
-*In plain terms.* The tempting version is *if Alice says not yet, she will eventually be woken*. That is false. If the parcel never arrives, nobody owes anyone a call, and that is correct behaviour. The correct version is conditional and limited to one epoch. After Alice says not yet, while Bob has not visited again, Alice has not been thrown away and the program has not aborted, if the parcel arrives and Alice is still wanted, then a card that wakes Alice's task must be used in that epoch. A card used during the visit itself, or used earlier in the same epoch before the parcel arrived, counts. A card used in an earlier epoch does not, which is stricter than Rust, where earlier wake-ups may merge with later ones. The only other way out is for Bob to start a new visit, which ends the epoch. If that new visit also ends in Pending, a fresh obligation begins. On a single story where Bob keeps visiting for ever, every epoch is ended by the next visit, so a faulty Alice that never arranges a call-back is not caught on that story. She is caught by conformance as a whole, which checks every story her model allows, including stories where Bob visits only when called, provided her model allows such stories. A separate rule, that Alice answers Ready once the parcel is there and she is visited, would catch her directly; it is still open.
+*In plain terms.* The tempting version is *if Alice says not yet, she will eventually be woken*. That is false. If the parcel never arrives, nobody owes anyone a call, and that is correct behaviour. The correct version is conditional. Suppose Alice says not yet, and later in the same epoch (before Bob visits again, before she is thrown away and before the program aborts) the parcel arrives while she is still wanted. Then one of three things must eventually happen: a card is used that wakes the task of the card Alice currently holds, which is the card from Bob's most recent visit; Alice finishes with Ready; or Alice is thrown away or the program aborts. A card used during the visit itself, or earlier in the epoch, counts.
+
+Bob visiting again does **not** count. Visiting is Bob's choice and says nothing about whether Alice arranged a call-back, so a Bob who visits constantly cannot hide an Alice who never does. If the new visit finds the parcel and Alice answers Ready, the obligation is met that way. Whether the system as a whole keeps moving is a separate question from whether Alice keeps her promise.
+
+One weakness remains: *eventually* has no time limit. An Alice who never arranges a call-back still passes on a story where, much later and for unrelated reasons, a card for her task is used, she finishes with Ready, or the program aborts. Closing that gap needs a time bound tied to Bob's scheduling, which is open work.
 
 Whether *the parcel has arrived* is decided by a test that Charlie's description supplies, applied to Alice's state. It is never defined as *a card was used*. If it were, the rule would collapse into *if a card was used, then a card is used*, which is true and says nothing. Such circular definitions are the most common way a *liveness* rule, a rule that something good eventually happens, quietly proves nothing.
 
@@ -375,20 +383,31 @@ structure EnvironmentModel (σ : Type) where
 ```
 
 ```lean
+def CurrentWaker {α : Type} (t : Trace α) (b k : Nat) (v : WakerId) : Prop :=
+  ∃ b' c', b ≤ b' ∧ b' < k ∧ t b' = .pollBegin c' v ∧ NoPollBetween t b' k
+```
+
+```lean
+def CountingWake {α : Type} (W : WakerEnv) (t : Trace α) (b k : Nat) : Prop :=
+  ∃ w' v, t k = .wake w' ∧ CurrentWaker t b k v ∧ WakeEquivalent W w' v
+```
+
+```lean
 def ProgressNotifies {σ α : Type} (W : WakerEnv) (E : EnvironmentModel σ) (s : Nat → σ)
     (t : Trace α) : Prop :=
   ∀ b i w, SuspendedFrom t b i w →
     ∀ j, i < j → NoPollBetween t i j → (∀ m, i < m → m ≤ j → ¬ TerminalAt t m) →
       E.progressOpportunity (s j) → E.stillInterested (s j) →
-        (∃ k w', b < k ∧ NoPollBetween t i k ∧ t k = .wake w' ∧ WakeEquivalent W w' w) ∨
-        (∃ k, j < k ∧ NoPollBetween t i k ∧ PollBeginAt t k)
+        ∃ k, b < k ∧ (CountingWake W t b k ∨ ReadyAt t k ∨ TerminalAt t k)
 ```
 
 `EnvironmentModel` is Charlie's description. `progressOpportunity` answers *has the parcel arrived?* and `stillInterested` answers *is Alice still wanted?*, both about a given state of Alice. `s : Nat → σ` gives Alice's state at each position, so `s j` is her state at position $j$. `W` is Bob's card register, used to compare cards.
 
-`ProgressNotifies` reads: for every visit that began at $b$ with card $w$ and ended with Pending at $i$, and every later position $j$ in the same epoch, with no drop or abort after $i$ up to and including $j$, where the parcel is there and Alice is still wanted: either some card $w'$ equivalent to $w$ is used at a position $k$ after $b$ in that epoch, or a new visit begins at some position $k$ after $j$, ending the epoch.
+`CurrentWaker t b k v`: card $v$ is the one Alice holds at position $k$, meaning it was handed over at the most recent visit that began at or after $b$ and before $k$. `CountingWake W t b k`: position $k$ is a use of some card $w'$ that wakes the same task as the card current at $k$. A card from an earlier visit that no longer matches the current one does not count.
 
-Two proofs keep the rule honest. If the parcel never arrives, the obligation never applies. A separate proof exhibits a story in which Alice answers Pending and no card is ever used, which refutes *not yet implies a call-back*.
+`ProgressNotifies` reads: for every visit that began at $b$ with card $w$ and ended with Pending at $i$, and every later position $j$ in the same epoch, with no drop or abort after $i$ up to and including $j$, where the parcel is there and Alice is still wanted: there is some position $k$ after $b$ that is a counting wake, or where Alice answers Ready, or where she is dropped or the program aborts.
+
+Four proofs keep the rule honest. If the parcel never arrives, the obligation never applies. A story in which Alice answers Pending and no card is ever used refutes *not yet implies a call-back*. A story in which Bob visits for ever, Alice always answers Pending and no card is ever used, while the parcel is there, breaks the rule. And a story in which Alice answers Pending, the parcel arrives and Alice is then thrown away keeps the rule.
 
 *Status: modelled.*
 
@@ -401,11 +420,12 @@ Two proofs keep the rule honest. If the parcel never arrives, the obligation nev
 ```lean
 def WakesLatest {α : Type} (E : WakerEnv) (t : Trace α) : Prop :=
   ∀ b i w, SuspendedFrom t b i w →
-    ∀ k w', i < k → NoPollBetween t i k → t k = .wake w' →
+    ∀ k w', i < k → NoPollBetween t i k → (∀ m, i < m → m ≤ k → ¬ TerminalAt t m) →
+      t k = .wake w' →
       ∃ k' w'', b < k' ∧ NoPollBetween t i k' ∧ t k' = .wake w'' ∧ WakeEquivalent E w'' w
 ```
 
-Whenever the visit that began at $b$ with newest card $w$ ended with Pending at $i$: if any card $w'$ is used at a position $k$ after $i$ in the same epoch, then some card $w''$ (read *w-double-prime*, a third card name) that is equivalent to $w$ is used at some position $k'$ after $b$ in that epoch.
+Whenever the visit that began at $b$ with newest card $w$ ended with Pending at $i$: if any card $w'$ is used at a position $k$ after $i$ in the same epoch, before any drop or abort, then some card $w''$ (read *w-double-prime*, a third card name) that is equivalent to $w$ is used at some position $k'$ after $b$ in that epoch.
 
 Three proofs show the rule is balanced. When the two cards belong to different tasks, it rejects a story where only the old card is used, and accepts one where the newest card is used. When both cards belong to the same task, it accepts a story where only the old card is used. *Status: modelled; all three checks proved.*
 
@@ -500,7 +520,23 @@ Each statement below sounds reasonable, and each is false for real Rust. The mod
 | Ready means success | The result can itself be an error | Rust only |
 | Throwing Alice away undoes what she did | Effects on the outside world remain | Rust only |
 
-The model must also be strong enough to reject faulty behaviour. The newest-card promise rejects a story in which only an old card is used, and that rejection is proved. A state in which Alice is waiting, the parcel is there, and the newest card was never used is rejected by the no-lost-call-back property, and that rejection is proved. That property is:
+The model must also be strong enough to reject faulty behaviour. The newest-card promise rejects a story in which only an old card is used, and that rejection is proved. The next section goes further and checks one real future from start to finish.
+
+## A complete example: the oneshot channel
+
+A *oneshot channel* carries exactly one value from a sender to a receiver. Here Alice is the receiver, waiting for one parcel, and the sender is the part of Charlie's world that delivers it. The Rust code has two versions of Alice. Both compile and both have the right shape. Only one behaves correctly. This section shows, in Lean, that the faulty one loses a call-back and the correct one never does.
+
+### The rules about lost call-backs
+
+```lean
+structure LostWakeObservables (σ : Type) where
+  pending : σ → Prop
+  valueAvailable : σ → Prop
+  notificationOutstanding : σ → Prop
+  pollInFlight : σ → Prop
+  senderOwesNotification : σ → Prop
+  completed : σ → Prop
+```
 
 ```lean
 def NoLostWakeup {σ : Type} (O : LostWakeObservables σ) (reachable : σ → Prop) : Prop :=
@@ -508,7 +544,123 @@ def NoLostWakeup {σ : Type} (O : LostWakeObservables σ) (reachable : σ → Pr
     O.notificationOutstanding s ∨ O.pollInFlight s ∨ O.senderOwesNotification s
 ```
 
-`O` supplies five yes-or-no questions about a state: is Alice waiting, has the parcel arrived, has the newest card been used, is a visit under way, and does the sender still owe a call. `reachable s` asks whether Alice can actually get into state `s`. The property reads: in every reachable state where Alice is waiting and the parcel has arrived, the newest card has been used, or a visit is under way, or the sender still owes a call. The third case matters for a correct sender. A correct sender stores the parcel, takes the card, lets go of the lock (the device that stops two threads changing the slot at once), and only then uses the card. In the moment between letting go and using the card, the parcel is there but no card has been used yet. On its own this third case could be abused: a model whose sender owes a call for ever would always pass. So the property must be proved together with a companion liveness property, that whenever the sender owes a call, the call is delivered at a strictly later point. Even this companion is not yet tight: the question *has the newest card been used?* is still answered by the model rather than read off the actual card uses, and the run is not yet tied to the model. Both gaps, and the proofs, are still to be done.
+`LostWakeObservables` lists six yes-or-no questions about a state: is Alice waiting, has the parcel arrived, has the newest card been used, is a visit under way, does the sender still owe a call with the newest card, and has Alice finished. `reachable s` asks whether the future can actually get into state `s`. `NoLostWakeup` reads: in every reachable state where Alice is waiting and the parcel has arrived, the newest card has been used, or a visit is under way, or the sender still owes a call with the newest card.
+
+The third case is needed because of how a correct sender works. It locks the slot (a *lock* stops two threads changing the slot at once), stores the parcel, takes the card, unlocks, and only then uses the card. In the moment between unlocking and using the card, the parcel is there but no card has been used yet. On its own that third case could be abused, because a sender that owed a call for ever would always pass. So it comes with a companion rule:
+
+```lean
+def SenderEventuallyPays {σ : Type} (O : LostWakeObservables σ) (s : Nat → σ) : Prop :=
+  ∀ n, O.senderOwesNotification (s n) →
+    ∃ m, n < m ∧ (O.notificationOutstanding (s m) ∨ O.completed (s m))
+```
+
+Along a run `s`, whenever the sender owes a call with the newest card at position $n$, at some later position $m$ either that card has been used or Alice has finished. Finishing counts because a fresh visit that finds the parcel needs no call.
+
+### The oneshot as a machine
+
+```lean
+structure OneshotState where
+  -- the slot holds the value
+  value : Bool
+  -- the waker registered in the slot
+  slot : Option Nat
+  -- the waker of the most recent poll
+  latest : Option Nat
+  -- the most recent poll returned `Pending`
+  suspended : Bool
+  -- the receiver has returned `Ready`
+  done : Bool
+  -- the sender has stored the value
+  sent : Bool
+  -- the waker the sender took and has not yet woken
+  owes : Option Nat
+  -- the most recent poll's waker has been woken since that poll
+  wokeLatest : Bool
+  deriving DecidableEq
+```
+
+The state records whether the parcel is in the slot, which card the slot holds, the card from the most recent visit, whether Alice last answered Pending, whether she has finished, whether the sender has delivered, which card the sender has taken and not yet used, and whether the newest card has been used since the last visit. Each `--` line above a field is a comment explaining it.
+
+```lean
+def registerOnPoll : Variant → Option Nat → Nat → Option Nat
+  | .correct, _, n => some n
+  | .buggy, none, n => some n
+  | .buggy, some w, _ => some w
+```
+
+This is the only difference between the two versions of Alice. When a visit finds no parcel, the correct Alice puts the new card `n` in the slot every time. The faulty Alice puts a card there only if the slot is empty, so after the first visit she keeps the old card.
+
+```lean
+inductive Step (v : Variant) : OneshotState → OneshotState → Prop where
+  | pollReady (s : OneshotState) (n : Nat) : s.done = false → s.value = true →
+      Step v s { s with value := false, done := true, suspended := false,
+                        latest := some n, wokeLatest := false }
+  | pollPending (s : OneshotState) (n : Nat) : s.done = false → s.value = false →
+      Step v s { s with slot := registerOnPoll v s.slot n, latest := some n,
+                        suspended := true, wokeLatest := false }
+  | send (s : OneshotState) : s.sent = false →
+      Step v s { s with value := true, sent := true, owes := s.slot, slot := none }
+  | wake (s : OneshotState) (w : Nat) : s.owes = some w →
+      Step v s { s with owes := none, wokeLatest := s.wokeLatest || decide (s.latest = some w) }
+```
+
+`Step v s s'` says the machine may move from state `s` to state `s'`, for version `v` of Alice. There are four kinds of step, one per action in the Rust code. In `pollReady`, a visit with card `n` finds the parcel, takes it, and Alice finishes. In `pollPending`, a visit with card `n` finds no parcel, and the slot is updated as `registerOnPoll` says. In `send`, the sender stores the parcel and takes whatever card is in the slot. In `wake`, the sender uses the card `w` it took; if that is the newest card, the newest card now counts as used. The notation `{ s with value := false, … }` means *the state `s`, with these fields changed*. `||` is *or* on true/false values, and `decide (…)` turns a yes-or-no statement into true or false.
+
+```lean
+inductive Reachable (v : Variant) : OneshotState → Prop where
+  | init : Reachable v .init
+  | step {s s' : OneshotState} : Reachable v s → Step v s s' → Reachable v s'
+```
+
+A state is *reachable* if the machine can get there from the starting state by a sequence of steps.
+
+A poll is a single step here because the Rust code holds the lock for the whole check-and-register. Nothing else can touch the slot during it, so no poll is ever half-done, and the *visit under way* case of `NoLostWakeup` never applies to this machine.
+
+### The faulty Alice loses a call-back
+
+```lean
+theorem buggy_reaches_lostState : Reachable .buggy lostState
+```
+
+```lean
+theorem buggy_violates_noLostWakeup :
+    ¬ Properties.NoLostWakeup oneshotObs (Reachable .buggy)
+```
+
+The proof follows four steps of the faulty machine. Bob visits with card 1, and it goes in the slot. Bob visits again with card 2, but the faulty Alice keeps card 1. The sender delivers the parcel and takes card 1. The sender uses card 1. Alice is now waiting, the parcel is there, card 2 has never been used and the sender owes nothing, so `NoLostWakeup` fails. This is a real execution of the machine, not a state picked by hand. The Rust test `buggy_oneshot_loses_wake` shows the same behaviour in running code.
+
+### The correct Alice never loses one
+
+```lean
+theorem correct_noLostWakeup : Properties.NoLostWakeup oneshotObs (Reachable .correct)
+```
+
+The proof is by *induction*: it shows that a stronger property holds in the starting state and survives every kind of step, so it holds in every reachable state. The stronger property says, among other things, that while Alice waits without the parcel, the slot holds the newest card; and that once the sender has delivered, the slot is empty and either the parcel is there or Alice has finished. From that, whenever Alice waits with the parcel there, either the newest card has been used or the sender still holds it.
+
+### And the sender eventually pays
+
+```lean
+def IsRun (v : Variant) (r : Nat → OneshotState) : Prop :=
+  r 0 = .init ∧ ∀ n, Step v (r n) (r (n + 1)) ∨ r (n + 1) = r n
+```
+
+```lean
+def SenderFair (r : Nat → OneshotState) : Prop :=
+  ∀ n, (r n).owes ≠ none → ∃ m, n ≤ m ∧ (r (m + 1)).owes = none
+```
+
+```lean
+theorem correct_senderEventuallyPays {r : Nat → OneshotState} (hr : IsRun .correct r)
+    (hf : SenderFair r) : Properties.SenderEventuallyPays oneshotObs r
+```
+
+`IsRun v r` says `r` is a run of the machine: it starts in the initial state, and each next state follows by a step or is unchanged. `SenderFair r` is the scheduling assumption: whenever the sender owes a call, it eventually makes it. Without that assumption the sender's thread could stall for ever between unlocking and using the card, and no future could do anything about it. The theorem reads: on every fair run of the correct machine, whenever the sender owes a call with the newest card, at a strictly later point that card has been used or Alice has finished. It shows the call-back is made. It does not show that Alice then finishes: that needs Bob to visit again after the call, which is Bob's promise (Rule 3), not Alice's.
+
+A further proof gives one fair run in which the sender really does owe the newest card a call (Bob visits with card 1, the sender delivers and takes card 1, then uses it). Without such a run, the theorem could hold only because its premise never does.
+
+### What this example does and does not show
+
+It shows, for one real future, the full chain the model is built for: precise rules, a machine for the implementation, a proof that the faulty version breaks a rule, and a proof that the correct version keeps it, including a liveness rule under a stated scheduling assumption. It does not yet connect the Lean machine to the compiled Rust code: that each step really matches what the Rust does is checked by reading the code, not proved. Each card number is taken to stand for its own task, so if a later visit reuses a number, using that card counts as using the newest one. Two Rust behaviours are left out of the machine: dropping the sender without sending, which leaves Alice waiting for ever, and polling Alice again after Ready, which in the Rust code registers a card and answers Pending. The trace-based rules earlier on this page, and the Rust-to-Lean refinement, are not yet linked to this machine.
 
 ## The model as a system
 

@@ -14,7 +14,14 @@ pub fn once<T>(v: T) -> Once<T> {
 
 impl<T: Unpin> Future for Once<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<T> {
-        Poll::Ready(self.0.take().expect("Once polled after completion"))
+    /// # Panics
+    ///
+    /// Panics when polled after it has returned `Ready`. That panic is the
+    /// behaviour this witness exists to show.
+    fn poll(mut self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<T> {
+        match self.0.take() {
+            Some(value) => Poll::Ready(value),
+            None => panic!("Once polled after completion"),
+        }
     }
 }

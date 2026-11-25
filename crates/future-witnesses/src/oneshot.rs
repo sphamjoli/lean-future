@@ -1,10 +1,15 @@
 //! Single-value channel receivers: one conforming, one with a lost wake-up.
 //!
-//! Target theorem (`Properties/Liveness.lean`, `NoLostWakeup`):
-//! `Pending ∧ ValueAvailable → NotificationOutstanding ∨ PollInFlight`.
+//! The Lean model of both receivers is `RustFuture.Implementations.Oneshot`,
+//! where `correct_noLostWakeup` proves the correct receiver never loses a
+//! wake-up and `buggy_violates_noLostWakeup` proves the faulty one does.
+//!
+//! The slot is guarded by `parking_lot`'s mutex, which does not poison, so
+//! taking the lock cannot fail.
+use parking_lot::Mutex;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 struct Slot<T> {
@@ -16,48 +21,56 @@ struct Slot<T> {
 pub struct Sender<T>(Arc<Mutex<Slot<T>>>);
 
 impl<T> Sender<T> {
-    pub fn send(self, v: T) {
-        let waker = {
-            let mut s = self.0.lock().unwrap();
-            s.value = Some(v);
-            s.waker.take()
+    /// Stores `value`, takes the registered waker under the lock, and wakes it
+    /// after releasing the lock.
+    pub fn send(self, value: T) {
+        let taken = {
+            let mut slot = self.0.lock();
+            slot.value = Some(value);
+            slot.waker.take()
         };
-        if let Some(w) = waker {
-            w.wake();
+        if let Some(waker) = taken {
+            waker.wake();
         }
     }
 }
 
-pub fn channel<T>() -> (Sender<T>, correct::Receiver<T>) {
-    let slot = Arc::new(Mutex::new(Slot {
+fn empty_slot<T>() -> Arc<Mutex<Slot<T>>> {
+    Arc::new(Mutex::new(Slot {
         value: None,
         waker: None,
-    }));
+    }))
+}
+
+/// A channel whose receiver registers the waker of every poll.
+pub fn channel<T>() -> (Sender<T>, correct::Receiver<T>) {
+    let slot = empty_slot();
     (Sender(slot.clone()), correct::Receiver(slot))
 }
 
+/// A channel whose receiver registers only the first poll's waker.
 pub fn buggy_channel<T>() -> (Sender<T>, buggy::Receiver<T>) {
-    let slot = Arc::new(Mutex::new(Slot {
-        value: None,
-        waker: None,
-    }));
+    let slot = empty_slot();
     (Sender(slot.clone()), buggy::Receiver(slot))
 }
 
+/// The conforming receiver.
 pub mod correct {
     use super::*;
+
+    /// Receiver half that checks for the value and registers the waker under
+    /// one lock, so no wake can be lost between the two.
     pub struct Receiver<T>(pub(super) Arc<Mutex<Slot<T>>>);
 
     impl<T> Future for Receiver<T> {
         type Output = T;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-            // Check and register under one lock: no window for a lost wake.
-            let mut s = self.0.lock().unwrap();
-            match s.value.take() {
-                Some(v) => Poll::Ready(v),
+        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<T> {
+            let mut slot = self.0.lock();
+            match slot.value.take() {
+                Some(value) => Poll::Ready(value),
                 None => {
-                    // replaces any stale waker
-                    s.waker = Some(cx.waker().clone());
+                    // Replacing any earlier waker keeps the latest one registered.
+                    slot.waker = Some(context.waker().clone());
                     Poll::Pending
                 }
             }
@@ -65,22 +78,25 @@ pub mod correct {
     }
 }
 
+/// The faulty receiver.
 pub mod buggy {
     use super::*;
+
     /// DELIBERATELY NON-CONFORMING. Registers the waker only on the first poll,
-    /// so after a spurious poll with a fresh waker, `send` wakes a stale context
-    /// (the latest-waker clause is violated). Compiles; type system is silent.
+    /// so after a later poll with a fresh waker, `send` wakes a stale context
+    /// and the latest-waker clause is broken. It compiles; the type system
+    /// does not notice.
     pub struct Receiver<T>(pub(super) Arc<Mutex<Slot<T>>>);
 
     impl<T> Future for Receiver<T> {
         type Output = T;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-            let mut s = self.0.lock().unwrap();
-            if let Some(v) = s.value.take() {
-                return Poll::Ready(v);
+        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<T> {
+            let mut slot = self.0.lock();
+            if let Some(value) = slot.value.take() {
+                return Poll::Ready(value);
             }
-            if s.waker.is_none() {
-                s.waker = Some(cx.waker().clone());
+            if slot.waker.is_none() {
+                slot.waker = Some(context.waker().clone());
             }
             Poll::Pending
         }

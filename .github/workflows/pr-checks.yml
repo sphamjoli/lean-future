@@ -32,8 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Full history so a push to main scans the whole repository, not
-          # just the tip commit. Pull requests scan the merged working tree.
+          # Full history, because the scan below reads commits: a push to main
+          # scans every commit, and a pull request scans its own commits.
           fetch-depth: 0
 
       - name: Install Gitleaks
@@ -48,17 +48,21 @@ jobs:
 
       - name: Scan for secrets
         id: scan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set +e
-          # `gitleaks dir` walks the raw filesystem and does not honor
-          # .gitignore, so gitignored build output (target/, node_modules/,
-          # dist/) would be scanned if any happened to be present. This job
-          # never builds anything before this step, so none exists today —
-          # but .gitleaks.toml's [allowlist] excludes those paths explicitly
-          # so this stays true even if a future change adds a build/cache
-          # step earlier in this job, or someone runs this locally in a
-          # dirty working tree.
-          gitleaks dir . \
+          # `gitleaks git` reads commit history, not just the working tree, so a
+          # secret added and later removed is still found. A pull request scans
+          # its own commits; a push to main scans the full history.
+          if [ -n "$BASE_SHA" ]; then
+            LOG_OPTS="$BASE_SHA..$HEAD_SHA"
+          else
+            LOG_OPTS="--all"
+          fi
+          gitleaks git . \
+            --log-opts="$LOG_OPTS" \
             --config .gitleaks.toml \
             --redact \
             --no-banner \

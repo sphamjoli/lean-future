@@ -44,12 +44,18 @@ theorem st_suspended {w b i v : WakerId} (h : SuspendedFrom (suspendedTwice w) b
   | 0, hi | 2, hi | 4, hi => simp [suspendedTwice] at hi
   | i + 5, hi => simp [suspendedTwice] at hi
 
+theorem st_no_terminal {w m : Nat} : ¬ TerminalAt (suspendedTwice w) m := by
+  rintro (h | h) <;>
+    match m, h with
+    | 0, h | 1, h | 2, h | 3, h | 4, h => simp [suspendedTwice] at h
+    | m + 5, h => simp [suspendedTwice] at h
+
 theorem stale_violates_latest : ¬ WakesLatest distinctTasks (suspendedTwice 0) := by
   intro h
   have hs : SuspendedFrom (suspendedTwice 0) 2 3 1 :=
     ⟨1, by decide, rfl, rfl, fun m _ _ h1 h2 => by omega, fun m h1 h2 => by omega⟩
   have hnp : NoPollBetween (suspendedTwice 0) 3 4 := fun m _ _ h1 h2 => by omega
-  obtain ⟨k, w'', _, _, hw, heq⟩ := h 2 3 1 hs 4 0 (by decide) hnp rfl
+  obtain ⟨k, w'', _, _, hw, heq⟩ := h 2 3 1 hs 4 0 (by decide) hnp (fun _ _ _ => st_no_terminal) rfl
   obtain ⟨-, rfl⟩ := st_wake hw
   simp [WakeEquivalent, distinctTasks] at heq
 
@@ -57,7 +63,7 @@ theorem stale_violates_latest : ¬ WakesLatest distinctTasks (suspendedTwice 0) 
 after position 3, and the wake at 4 is the witness. -/
 theorem accepts_if {E : WakerEnv} {w : WakerId} (heq : WakeEquivalent E w 1) :
     WakesLatest E (suspendedTwice w) := by
-  intro b i v hs k w' hik hnp hk
+  intro b i v hs k w' hik hnp _ hk
   obtain ⟨rfl, -⟩ := st_wake hk
   rcases st_suspended hs with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
   · exact absurd rfl (hnp 2 1 1 (by decide) (by decide))
