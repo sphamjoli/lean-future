@@ -1,0 +1,30 @@
+"component: spec":
+  - changed-files:
+    - any-glob-to-any-file:
+      - "spec/**"
+      - "crates/spec-lint/**"
+
+"component: lean":
+  - changed-files:
+    - any-glob-to-any-file: "lean/**"
+
+"component: witnesses":
+  - changed-files:
+    - any-glob-to-any-file:
+      - "crates/future-witnesses/**"
+      - "crates/trace-recorder/**"
+
+"component: docs":
+  - changed-files:
+    - any-glob-to-any-file:
+      - "**/*.md"
+      - "docs/**"
+
+"infra":
+  - changed-files:
+    - any-glob-to-any-file:
+      - ".github/workflows/**"
+      - ".pre-commit-config.yaml"
+      - "lefthook.yml"
+      - ".gitleaks.toml"
+      - "scripts/**"

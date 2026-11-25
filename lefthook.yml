@@ -1,0 +1,53 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: rustfmt
+      glob: "*.rs"
+      # Formats staged Rust in place and restages it, so a formatting-only CI
+      # failure cannot reach a pull request.
+      run: cargo fmt --all -- {staged_files}
+      stage_fixed: true
+    - name: markdown wrap
+      glob: "*.md"
+      # Blocks any newly introduced Markdown paragraph hard-wrapped across
+      # multiple source lines instead of written as one line per paragraph.
+      # Diff-scoped (--staged): only lines this commit adds or changes can fail.
+      run: ./scripts/checkMarkdownWrap.sh --staged {staged_files}
+    - name: yaml validation
+      glob: "*.{yml,yaml}"
+      # Parses each staged YAML file with ruby's stdlib YAML, so a broken
+      # workflow surfaces at commit time rather than at dispatch.
+      run: ./scripts/checkYaml.sh {staged_files}
+    - name: toml validation
+      glob: "*.toml"
+      # Parses each staged TOML file. The Cargo manifests, lakefile.toml,
+      # spec/claims.toml and .gitleaks.toml all depend on well-formed TOML.
+      run: ./scripts/checkToml.sh {staged_files}
+    - name: shell validation
+      glob: "*.{sh,bash}"
+      # Parses each staged shell script with `bash -n`.
+      run: ./scripts/checkShell.sh {staged_files}
+    - name: github actions
+      glob: ".github/workflows/*.{yml,yaml}"
+      # Lints staged workflows with actionlint when installed; skips otherwise.
+      run: ./scripts/checkActions.sh {staged_files}
+
+commit-msg:
+  jobs:
+    - name: conventional commit message
+      # Same "type(scope): subject" rule as the PR-title check in
+      # .github/workflows/pr-checks.yml, with the same type and scope lists.
+      run: ./scripts/checkCommitMsg.sh {1}
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: clippy and tests
+      # Mirrors the CI witnesses job so a red CI run cannot be pushed.
+      run: cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
+    - name: claim catalogue
+      # Catalogue entries must name Lean declarations and witness tests that exist.
+      run: cargo run -q -p spec-lint
+    - name: lean build and axiom audit
+      # Whole-spec build; rejects sorry and any axiom beyond Lean's core trio.
+      run: cd lean && lake build > ../target/lean-build.log 2>&1; status=$?; cat ../target/lean-build.log; [ $status -eq 0 ] && ../scripts/checkLeanAxioms.sh ../target/lean-build.log

@@ -1,0 +1,12 @@
+[package]
+name = "future-witnesses"
+description = "Real Rust futures that witness (or refute) candidate axioms of the Lean specification"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+trace-recorder = { path = "../trace-recorder" }
