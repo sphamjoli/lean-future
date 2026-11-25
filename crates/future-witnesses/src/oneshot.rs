@@ -12,13 +12,20 @@ struct Slot<T> {
     waker: Option<Waker>,
 }
 
+/// Locks the shared slot. No code panics while holding this lock, so it is
+/// never poisoned.
+fn lock_slot<T>(slot: &Mutex<Slot<T>>) -> std::sync::MutexGuard<'_, Slot<T>> {
+    slot.lock()
+        .expect("slot mutex is never poisoned: no code panics while holding it")
+}
+
 /// Sender half. `send` stores the value and wakes the *latest* registered waker.
 pub struct Sender<T>(Arc<Mutex<Slot<T>>>);
 
 impl<T> Sender<T> {
     pub fn send(self, v: T) {
         let waker = {
-            let mut s = self.0.lock().unwrap();
+            let mut s = lock_slot(&self.0);
             s.value = Some(v);
             s.waker.take()
         };
@@ -52,7 +59,7 @@ pub mod correct {
         type Output = T;
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
             // Check and register under one lock: no window for a lost wake.
-            let mut s = self.0.lock().unwrap();
+            let mut s = lock_slot(&self.0);
             match s.value.take() {
                 Some(v) => Poll::Ready(v),
                 None => {
@@ -75,7 +82,7 @@ pub mod buggy {
     impl<T> Future for Receiver<T> {
         type Output = T;
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-            let mut s = self.0.lock().unwrap();
+            let mut s = lock_slot(&self.0);
             if let Some(v) = s.value.take() {
                 return Poll::Ready(v);
             }

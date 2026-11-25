@@ -48,6 +48,16 @@ struct Shared {
     woken: AtomicBool,
 }
 
+impl Shared {
+    /// Locks the event log. No code panics while holding this lock, so it is
+    /// never poisoned.
+    fn log(&self) -> std::sync::MutexGuard<'_, Vec<Event>> {
+        self.log
+            .lock()
+            .expect("trace log mutex is never poisoned: no code panics while holding it")
+    }
+}
+
 struct RecordingWaker {
     id: WakerId,
     shared: Arc<Shared>,
@@ -58,11 +68,7 @@ impl Wake for RecordingWaker {
         self.wake_by_ref()
     }
     fn wake_by_ref(self: &Arc<Self>) {
-        self.shared
-            .log
-            .lock()
-            .unwrap()
-            .push(Event::Wake { waker: self.id });
+        self.shared.log().push(Event::Wake { waker: self.id });
         self.shared.woken.store(true, Ordering::SeqCst);
     }
 }
@@ -116,7 +122,7 @@ where
             })),
         )
     };
-    let push = |e| shared.log.lock().unwrap().push(e);
+    let push = |e| shared.log().push(e);
 
     let mut fut = Box::pin(fut);
     let (mut wid, mut waker) = mk_waker();
@@ -153,14 +159,14 @@ where
             }
             Err(_) => {
                 push(Event::Panic { call });
-                let log = shared.log.lock().unwrap().clone();
+                let log = shared.log().clone();
                 return log;
             }
         }
     }
     drop(fut);
     push(Event::Drop);
-    shared.log.lock().unwrap().clone()
+    shared.log().clone()
 }
 
 /// Serialise a trace for consumption by the Lean side (`lake exe checktrace`, future work).
@@ -182,4 +188,23 @@ pub fn ready_count(trace: &[Event]) -> usize {
             )
         })
         .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The exported JSON names each event and its fields, so a recording can be
+    /// read by a checker outside Rust.
+    #[test]
+    fn json_export_names_events_and_fields() {
+        let trace = record(std::future::ready(7u8), Config::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&to_json(&trace)).expect("to_json emits valid JSON");
+        let events = json.as_array().expect("a trace is a JSON array");
+        assert_eq!(events.len(), trace.len());
+        assert_eq!(events[1]["PollBegin"]["call"], 0);
+        assert_eq!(events[2]["PollReturn"]["result"]["Ready"], "7");
+        assert_eq!(events.last(), Some(&serde_json::json!("Drop")));
+    }
 }
