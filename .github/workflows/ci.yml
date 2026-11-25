@@ -48,10 +48,31 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: Build specification
         working-directory: lean
+        # bash (not the default `bash -e`) adds pipefail, so a failed build
+        # is not hidden by the pipe into tee.
+        shell: bash
         run: lake build 2>&1 | tee build.log
       - name: Reject sorry and non-core axioms
         working-directory: lean
         run: ../scripts/checkTrustBase.sh build.log
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install actionlint
+        run: |
+          curl -sSfL \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o actionlint.tar.gz
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+      - name: Lint workflows
+        run: ./actionlint -color
 
   claims:
     name: claim catalogue (spec-lint)
@@ -76,7 +97,7 @@ jobs:
   ci:
     name: CI summary
     if: ${{ always() }}
-    needs: [fmt, witnesses, lean, claims, docs]
+    needs: [fmt, witnesses, lean, claims, docs, actionlint]
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
@@ -91,6 +112,7 @@ jobs:
             echo "| lean | ${{ needs.lean.result }} |"
             echo "| claims | ${{ needs.claims.result }} |"
             echo "| rustdoc | ${{ needs.docs.result }} |"
+            echo "| actionlint | ${{ needs.actionlint.result }} |"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail if any required check did not pass
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

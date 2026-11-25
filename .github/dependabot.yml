@@ -6,3 +6,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Keep the Rust dependencies current as well.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
