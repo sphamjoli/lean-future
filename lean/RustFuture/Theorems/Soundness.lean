@@ -12,7 +12,10 @@ core (`propext`, `Quot.sound`, `Classical.choice`). CI checks this output. -/
 #print axioms RustFuture.Properties.verification_transfer
 #print axioms RustFuture.Implementations.pendingModel_all_runs
 #print axioms RustFuture.Counterexamples.termination_not_universal
-#print axioms RustFuture.Counterexamples.noLostWakeup_refutable
+#print axioms RustFuture.Counterexamples.buggy_violates_noLostWakeup
+#print axioms RustFuture.Implementations.correct_noLostWakeup
+#print axioms RustFuture.Implementations.correct_senderEventuallyPays
+#print axioms RustFuture.Implementations.exampleRun_witness
 #print axioms RustFuture.Counterexamples.stale_violates_latest
 #print axioms RustFuture.Counterexamples.latest_satisfiable
 #print axioms RustFuture.Contracts.wakeDelivery_refutable

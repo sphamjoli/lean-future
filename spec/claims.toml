@@ -119,12 +119,29 @@ source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
 lean = "RustFuture.Properties.NoLostWakeup"
 
 [[claim]]
-id = "no-lost-wakeup-refutable"
-text = "A suspended state with a value and an un-woken latest waker violates NoLostWakeup (reachability from the buggy receiver is open)"
+id = "buggy-receiver-loses-wake"
+text = "The faulty oneshot receiver reaches, by an actual execution, a state where it is waiting, the value is there, its latest waker was never woken and the sender owes nothing"
 kind = "implementation"
 status = "proved"
 source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
-lean = "RustFuture.Counterexamples.noLostWakeup_refutable"
+lean = "RustFuture.Counterexamples.buggy_violates_noLostWakeup"
+refuted_by = "buggy_oneshot_loses_wake"
+
+[[claim]]
+id = "correct-receiver-no-lost-wakeup"
+text = "In every reachable state of the correct oneshot receiver, if it is waiting and the value is there, its latest waker has been woken or the sender still owes that waker a wake"
+kind = "implementation"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
+lean = "RustFuture.Implementations.correct_noLostWakeup"
+
+[[claim]]
+id = "correct-receiver-sender-pays"
+text = "On every run of the correct oneshot in which the sender eventually makes any wake it owes, a wake owed to the latest waker is delivered or the receiver completes at a strictly later point"
+kind = "implementation"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
+lean = "RustFuture.Implementations.correct_senderEventuallyPays"
 
 [[claim]]
 id = "pin-unpin-exempt"
@@ -233,7 +250,7 @@ lean = "RustFuture.Counterexamples.epoch_not_confused"
 
 [[claim]]
 id = "sender-eventually-pays"
-text = "Whenever the oneshot sender owes a notification, the latest waker is later notified (companion to no-lost-wakeup)"
+text = "Whenever a sender owes the latest waker a notification, the notification is delivered or the future completes strictly later (companion to no-lost-wakeup)"
 kind = "implementation"
 status = "modelled"
 source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
@@ -254,3 +271,11 @@ kind = "permitted"
 status = "proved"
 source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html"
 lean = "RustFuture.Counterexamples.cancellation_discharges"
+
+[[claim]]
+id = "sender-pays-nonvacuous"
+text = "A fair run of the correct oneshot exists in which the sender owes the latest waker a wake, so the liveness theorem's premise can hold"
+kind = "implementation"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
+lean = "RustFuture.Implementations.exampleRun_witness"

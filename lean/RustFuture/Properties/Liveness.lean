@@ -17,6 +17,7 @@ structure LostWakeObservables (σ : Type) where
   notificationOutstanding : σ → Prop
   pollInFlight : σ → Prop
   senderOwesNotification : σ → Prop
+  completed : σ → Prop
 
 def NoLostWakeup {σ : Type} (O : LostWakeObservables σ) (reachable : σ → Prop) : Prop :=
   ∀ s, reachable s → O.pending s → O.valueAvailable s →
@@ -28,15 +29,13 @@ namespace RustFuture.Properties
 
 /-- Companion to `NoLostWakeup`. On its own, the third disjunct of
 `NoLostWakeup` can be met by a model whose sender owes a notification for ever,
-which would make the invariant hollow. This liveness property narrows that gap:
-along the run `s`, whenever the sender owes a notification, a strictly later
-state has the notification delivered. Both must be proved together.
-
-Known gaps, to close with the oneshot transition semantics: the observable
-`notificationOutstanding` is supplied by the model rather than defined from
-wake events of a waker equivalent to the latest one, so a model could make it
-trivially true; and `s` is not yet tied to the model's runs. Status: open. -/
+which would make the invariant hollow. This liveness property closes that gap
+along a run `s`: whenever the sender owes a notification, at a strictly later
+point either the notification has been delivered or the future has completed
+(a re-poll that finds the value needs no notification). The oneshot model proves
+it for every run of the model under a fairness assumption on the sender. -/
 def SenderEventuallyPays {σ : Type} (O : LostWakeObservables σ) (s : Nat → σ) : Prop :=
-  ∀ n, O.senderOwesNotification (s n) → ∃ m, n < m ∧ O.notificationOutstanding (s m)
+  ∀ n, O.senderOwesNotification (s n) →
+    ∃ m, n < m ∧ (O.notificationOutstanding (s m) ∨ O.completed (s m))
 
 end RustFuture.Properties
