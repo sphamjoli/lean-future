@@ -1,0 +1,184 @@
+# Claim catalogue — the specification's source of truth.
+# Every clause: where Rust says it, what kind of claim it is, and its evidence status.
+#   kind:   type_level | permitted | rejected | contract | caller_protocol | executor | implementation
+#   status: proved (Lean, core axioms only) | modelled (stated in Lean, unproved)
+#           | assumed (taken as a hypothesis) | open (not yet stated)
+# Rule: never upgrade a status without the Lean/Rust artefact that earns it. Enforced by `cargo run -p spec-lint`.
+rust_version = "1.97.1"
+
+[[claim]]
+id = "poll-returns-poll"
+text = "A normally returning poll produces Pending or Ready"
+kind = "type_level"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/task/enum.Poll.html"
+lean = "RustFuture.Poll"
+
+[[claim]]
+id = "may-never-complete"
+text = "A future can remain pending forever"
+kind = "permitted"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/fn.pending.html"
+lean = "RustFuture.Counterexamples.termination_not_universal"
+
+[[claim]]
+id = "termination-universal"
+text = "Every future eventually completes"
+kind = "rejected"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/fn.pending.html"
+lean = "RustFuture.Counterexamples.termination_not_universal"
+refuted_by = "pending_never_completes"
+
+[[claim]]
+id = "must-register-waker"
+text = "Every future must register or use a waker"
+kind = "rejected"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/future/fn.ready.html"
+refuted_by = "ready_completes_without_wake"
+
+[[claim]]
+id = "wake-implies-ready"
+text = "A wake guarantees the next poll returns Ready"
+kind = "rejected"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
+refuted_by = "self_wake_then_pending_again"
+
+[[claim]]
+id = "ready-absorbing"
+text = "Ready is final and polling again is harmless (rustc-generated async fns panic on re-poll at the pinned release)"
+kind = "rejected"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#panics"
+refuted_by = "async_fn_repoll_panics"
+
+[[claim]]
+id = "ready-is-success"
+text = "Ready implies application-level success"
+kind = "rejected"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/task/enum.Poll.html"
+refuted_by = "ready_is_not_success"
+
+[[claim]]
+id = "no-ub-after-ready"
+text = "Polling after completion must not cause undefined behaviour"
+kind = "contract"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#panics"
+lean = "RustFuture.Contracts.NoUB"
+
+[[claim]]
+id = "caller-stops-at-ready"
+text = "A well-behaved caller does not poll after Ready"
+kind = "caller_protocol"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#panics"
+lean = "RustFuture.Contracts.CallerStopsAtReady"
+
+[[claim]]
+id = "latest-waker"
+text = "If the future wakes while suspended, the most recent poll's waker is among those woken"
+kind = "contract"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Contracts.WakesLatest"
+
+[[claim]]
+id = "latest-waker-refutable"
+text = "WakesLatest rejects a trace that wakes only a stale waker"
+kind = "contract"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Counterexamples.stale_violates_latest"
+
+[[claim]]
+id = "wake-delivery"
+text = "While the executor runs and the task is unfinished, a wake is followed by at least one poll of that task (happens-before is an executor-model refinement)"
+kind = "executor"
+status = "assumed"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
+lean = "RustFuture.Contracts.WakeDelivery"
+
+[[claim]]
+id = "poll-non-blocking"
+text = "poll should return promptly without blocking"
+kind = "contract"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#runtime-characteristics"
+
+[[claim]]
+id = "no-lost-wakeup"
+text = "Suspended and value available implies the latest waker was notified or a poll is in flight"
+kind = "implementation"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
+lean = "RustFuture.Properties.NoLostWakeup"
+
+[[claim]]
+id = "no-lost-wakeup-refutable"
+text = "A suspended state with a value and an un-woken latest waker violates NoLostWakeup (reachability from the buggy receiver is open)"
+kind = "implementation"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html"
+lean = "RustFuture.Counterexamples.noLostWakeup_refutable"
+
+[[claim]]
+id = "pin-unpin-exempt"
+text = "Unpin futures are exempt from pinning restrictions"
+kind = "type_level"
+status = "assumed"
+source = "https://doc.rust-lang.org/1.97.1/std/pin/index.html"
+lean = "RustFuture.Rust.PinModel"
+
+[[claim]]
+id = "latest-waker-satisfiable"
+text = "WakesLatest accepts a trace that wakes the most recent waker"
+kind = "contract"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Counterexamples.latest_satisfiable"
+
+[[claim]]
+id = "wake-delivery-refutable"
+text = "WakeDelivery rejects a wake on a live task with no later poll"
+kind = "executor"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/task/struct.Waker.html#method.wake"
+lean = "RustFuture.Contracts.wakeDelivery_refutable"
+
+[[claim]]
+id = "progress-notifies"
+text = "After Pending, if progress becomes possible while the future is still wanted, a wake or a new poll eventually follows"
+kind = "contract"
+status = "modelled"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html#return-value"
+lean = "RustFuture.Contracts.ProgressNotifies"
+
+[[claim]]
+id = "pending-implies-wake"
+text = "Pending implies an eventual wake"
+kind = "rejected"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/fn.pending.html"
+lean = "RustFuture.Implementations.pending_without_wake"
+refuted_by = "pending_never_completes"
+
+[[claim]]
+id = "drop-reverses-effects"
+text = "Dropping a future reverses its effects"
+kind = "rejected"
+status = "open"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html"
+refuted_by = "drop_does_not_undo_effects"
+
+[[claim]]
+id = "assumptions-consistent"
+text = "Assumptions and obligations hold together on a run where a live wake, its delivery, a latest-waker window and a progress opportunity all occur"
+kind = "contract"
+status = "proved"
+source = "https://doc.rust-lang.org/1.97.1/std/future/trait.Future.html"
+lean = "RustFuture.Contracts.assumptions_consistent_live"

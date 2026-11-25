@@ -1,0 +1,32 @@
+name: Claim change
+description: Propose adding, rejecting, or reclassifying a claim about Rust futures.
+labels: ["component: spec"]
+body:
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim
+      description: The statement about Future, Waker, Poll, Context or Pin, in one sentence.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Rust documentation source
+      description: Link into the docs of the pinned Rust release.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options: [type_level, permitted, rejected, contract, caller_protocol, executor, implementation]
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A Rust program that witnesses the behaviour (required for a rejected claim), or the Lean statement or proof.
+    validations:
+      required: true

@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  witnesses:
+    name: witnesses (clippy, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Specification regression suite
+        run: cargo test --workspace --locked
+
+  lean:
+    name: lean (build, trust-base check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          bash elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build specification
+        working-directory: lean
+        run: lake build 2>&1 | tee build.log
+      - name: Reject sorry and non-core axioms
+        working-directory: lean
+        run: ../scripts/checkTrustBase.sh build.log
+
+  claims:
+    name: claim catalogue (spec-lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Check claims against Lean and witnesses
+        run: cargo run -p spec-lint --locked
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Build docs
+        run: cargo doc --workspace --no-deps --locked
+
+  ci:
+    name: CI summary
+    if: ${{ always() }}
+    needs: [fmt, witnesses, lean, claims, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## CI summary"
+            echo ""
+            echo "| Check | Result |"
+            echo "| ----- | ------ |"
+            echo "| rustfmt | ${{ needs.fmt.result }} |"
+            echo "| witnesses | ${{ needs.witnesses.result }} |"
+            echo "| lean | ${{ needs.lean.result }} |"
+            echo "| claims | ${{ needs.claims.result }} |"
+            echo "| rustdoc | ${{ needs.docs.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail if any required check did not pass
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "One or more required checks failed." >&2
+          exit 1

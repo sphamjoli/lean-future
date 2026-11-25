@@ -1,0 +1,27 @@
+-- Root module: imports everything so `lake build` checks the whole spec.
+import RustFuture.Contracts.Assumptions
+import RustFuture.Contracts.Environment
+import RustFuture.Contracts.Executor
+import RustFuture.Contracts.Future
+import RustFuture.Contracts.Witness
+import RustFuture.Counterexamples.LostWake
+import RustFuture.Counterexamples.NonTermination
+import RustFuture.Counterexamples.StaleWaker
+import RustFuture.Implementations.Oneshot
+import RustFuture.Implementations.Pending
+import RustFuture.Implementations.Ready
+import RustFuture.Implementations.YieldNow
+import RustFuture.Properties.Cancellation
+import RustFuture.Properties.Liveness
+import RustFuture.Properties.Refinement
+import RustFuture.Properties.Safety
+import RustFuture.Rust.Memory
+import RustFuture.Rust.Ownership
+import RustFuture.Rust.Pin
+import RustFuture.Semantics.Context
+import RustFuture.Semantics.Future
+import RustFuture.Semantics.Poll
+import RustFuture.Semantics.Trace
+import RustFuture.Semantics.Waker
+import RustFuture.Theorems.Composition
+import RustFuture.Theorems.Soundness

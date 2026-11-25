@@ -1,0 +1,8 @@
+name = "RustFuture"
+defaultTargets = ["RustFuture"]
+
+[leanOptions]
+autoImplicit = false
+
+[[lean_lib]]
+name = "RustFuture"

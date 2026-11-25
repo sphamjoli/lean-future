@@ -1,0 +1,3 @@
+# The Lean specification is pinned to the std docs of this release.
+[toolchain]
+channel = "1.97.1"
